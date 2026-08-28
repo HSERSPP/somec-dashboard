@@ -10,141 +10,163 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
 :root{
-  --blue:#1a4a7a; --blue-mid:#2563a8; --blue-light:#e8f0fa;
-  --orange:#d04a1a; --green:#1a7a4a; --green-bg:#e8f5ee;
-  --amber:#a06010; --amber-bg:#fff8e8;
-  --red:#c0392b; --red-bg:#fdecea;
-  --gray-bg:#f0f2f5; --gray-border:#d0d4da; --gray-mid:#7a8090;
-  --text:#1a1e28; --white:#ffffff;
-  --radius:8px; --shadow:0 2px 8px rgba(0,0,0,.08);
+  --blue:#1a4a7a;--blue-mid:#2563a8;--blue-light:#e8f0fa;
+  --orange:#d04a1a;--green:#1a7a4a;--green-bg:#e8f5ee;
+  --amber:#a06010;--amber-bg:#fff8e8;
+  --red:#c0392b;--red-bg:#fdecea;
+  --gray-bg:#f0f2f5;--gray-border:#d0d4da;--gray-mid:#7a8090;
+  --text:#1a1e28;--white:#ffffff;
+  --radius:8px;--shadow:0 2px 8px rgba(0,0,0,.08);
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color:var(--text);min-height:100vh}
 
 /* HEADER */
-.header{background:var(--blue);color:#fff;padding:0}
-.header-inner{max-width:1200px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.header-brand{display:flex;align-items:center;gap:12px}
-.header-logo img{height:40px;filter:brightness(0) invert(1)}
-.header-title{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.9}
+.header{background:var(--blue);color:#fff}
+.header-inner{max-width:1200px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.header-title{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
 .header-title span{color:var(--orange);display:block;font-size:11px}
 .header-badge{background:rgba(255,255,255,.15);border-radius:20px;padding:4px 12px;font-size:11px;font-weight:600}
 
+/* TABS */
+.tabs-bar{background:var(--white);border-bottom:2px solid var(--gray-border);padding:0 20px;position:sticky;top:0;z-index:200;box-shadow:var(--shadow)}
+.tabs-inner{max-width:1200px;margin:0 auto;display:flex;gap:0}
+.tab-btn{border:none;background:none;padding:12px 18px;font-size:13px;font-weight:600;color:var(--gray-mid);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;white-space:nowrap}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab-btn:hover{color:var(--blue)}
+
 /* FILTRI */
-.filters-bar{background:var(--white);border-bottom:1px solid var(--gray-border);padding:12px 20px;position:sticky;top:0;z-index:100;box-shadow:var(--shadow)}
-.filters-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.filter-group{display:flex;align-items:center;gap:6px}
+.filters-bar{background:#f8f9fb;border-bottom:1px solid var(--gray-border);padding:10px 20px}
+.filters-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.filter-group{display:flex;align-items:center;gap:5px}
 .filter-label{font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase;letter-spacing:.04em}
-.filter-select{border:1px solid var(--gray-border);border-radius:var(--radius);padding:6px 10px;font-size:13px;font-family:inherit;color:var(--text);background:#fff;cursor:pointer}
-.filter-select:focus{outline:none;border-color:var(--blue-mid)}
-.btn-refresh{background:var(--blue);color:#fff;border:none;border-radius:var(--radius);padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px}
-.btn-refresh:hover{background:var(--blue-mid)}
+.filter-select{border:1px solid var(--gray-border);border-radius:var(--radius);padding:5px 8px;font-size:12px;font-family:inherit;color:var(--text);background:#fff;cursor:pointer}
+.btn-action{border:none;border-radius:var(--radius);padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:hover{background:var(--blue-mid)}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:hover{background:#156038}
 .last-update{font-size:11px;color:var(--gray-mid);margin-left:auto}
 
 /* MAIN */
 .main{max-width:1200px;margin:0 auto;padding:20px}
+.tab-content{display:none}.tab-content.active{display:block}
 
-/* OVERVIEW CARDS */
+/* OVERVIEW */
 .overview-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
 @media(max-width:900px){.overview-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:480px){.overview-grid{grid-template-columns:1fr 1fr}}
-.ov-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px}
-.ov-card .ov-icon{font-size:24px;margin-bottom:4px}
-.ov-card .ov-num{font-size:28px;font-weight:800;line-height:1}
-.ov-card .ov-label{font-size:11px;font-weight:600;color:var(--gray-mid);text-transform:uppercase;letter-spacing:.04em}
-.ov-card .ov-sub{font-size:11px;color:var(--gray-mid);margin-top:2px}
+.ov-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.ov-icon{font-size:22px;margin-bottom:4px}
+.ov-num{font-size:28px;font-weight:800;line-height:1}
+.ov-label{font-size:11px;font-weight:600;color:var(--gray-mid);text-transform:uppercase;letter-spacing:.04em}
+.ov-sub{font-size:11px;color:var(--gray-mid);margin-top:2px}
 .ov-card.green .ov-num{color:var(--green)}
 .ov-card.amber .ov-num{color:var(--amber)}
 .ov-card.red   .ov-num{color:var(--red)}
 .ov-card.blue  .ov-num{color:var(--blue)}
 
-/* SPI SECTION */
-.section-title{font-size:14px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+/* SECTION TITLE */
+.section-title{font-size:13px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .section-title::after{content:'';flex:1;height:1px;background:var(--gray-border)}
 
-/* SPI CARDS */
-.spi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:24px}
-.spi-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);border-left:4px solid var(--gray-border)}
-.spi-card.ottimo   {border-left-color:#1a7a4a}
-.spi-card.buono    {border-left-color:#2ecc71}
-.spi-card.discreto {border-left-color:#f39c12}
-.spi-card.sufficiente{border-left-color:#e67e22}
-.spi-card.insufficiente{border-left-color:#e74c3c}
-.spi-card.gravemente{border-left-color:#c0392b}
-.spi-card.nd       {border-left-color:#bdc3c7}
-.spi-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.spi-name{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.03em}
-.spi-peso{font-size:10px;color:var(--gray-mid);background:var(--gray-bg);border-radius:10px;padding:2px 7px}
-.spi-score-row{display:flex;align-items:baseline;gap:6px;margin-bottom:6px}
-.spi-score{font-size:32px;font-weight:800;line-height:1}
-.spi-score.ottimo   {color:#1a7a4a}
-.spi-score.buono    {color:#27ae60}
-.spi-score.discreto {color:#f39c12}
-.spi-score.sufficiente{color:#e67e22}
-.spi-score.insufficiente{color:#e74c3c}
-.spi-score.gravemente{color:#c0392b}
-.spi-score.nd       {color:#bdc3c7}
-.spi-max{font-size:14px;color:var(--gray-mid)}
-.spi-bar-wrap{background:#f0f2f5;border-radius:10px;height:6px;overflow:hidden;margin-bottom:6px}
-.spi-bar{height:6px;border-radius:10px;transition:width .6s ease}
-.spi-giudizio{font-size:11px;font-weight:700;letter-spacing:.04em}
-.spi-detail{font-size:11px;color:var(--gray-mid);margin-top:4px}
+/* VOTO */
+.voto-card{background:var(--white);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.voto-circle{width:110px;height:110px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-weight:800}
+.voto-num{font-size:34px;line-height:1}
+.voto-max{font-size:13px;opacity:.7}
+.voto-info h2{font-size:18px;font-weight:800;margin-bottom:4px}
+.voto-info p{font-size:12px;color:var(--gray-mid);line-height:1.5}
+.voto-implic{margin-top:8px;padding:7px 10px;border-radius:var(--radius);font-size:12px;font-weight:600}
 
-/* VOTO FINALE */
-.voto-card{background:var(--white);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);margin-bottom:24px;display:flex;align-items:center;gap:24px}
-@media(max-width:600px){.voto-card{flex-direction:column;text-align:center}}
-.voto-circle{width:120px;height:120px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;font-weight:800}
-.voto-circle .voto-num{font-size:36px;line-height:1}
-.voto-circle .voto-max{font-size:14px;opacity:.7}
-.voto-info h2{font-size:20px;font-weight:800;margin-bottom:4px}
-.voto-info p{font-size:13px;color:var(--text-light);line-height:1.5}
-.voto-info .voto-implic{margin-top:8px;padding:8px 12px;border-radius:var(--radius);font-size:12px;font-weight:600}
+/* SPI CARDS */
+.spi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:24px}
+.spi-card{background:var(--white);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);border-left:4px solid var(--gray-border)}
+.spi-card.ottimo{border-left-color:#1a7a4a}.spi-card.buono{border-left-color:#27ae60}
+.spi-card.discreto{border-left-color:#f39c12}.spi-card.sufficiente{border-left-color:#e67e22}
+.spi-card.insufficiente{border-left-color:#e74c3c}.spi-card.gravemente{border-left-color:#c0392b}
+.spi-card.nd{border-left-color:#bdc3c7}
+.spi-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.spi-name{font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.03em}
+.spi-peso{font-size:10px;color:var(--gray-mid);background:var(--gray-bg);border-radius:10px;padding:2px 6px}
+.spi-score-row{display:flex;align-items:baseline;gap:4px;margin-bottom:5px}
+.spi-score{font-size:28px;font-weight:800;line-height:1}
+.spi-score.ottimo{color:#1a7a4a}.spi-score.buono{color:#27ae60}
+.spi-score.discreto{color:#f39c12}.spi-score.sufficiente{color:#e67e22}
+.spi-score.insufficiente{color:#e74c3c}.spi-score.gravemente{color:#c0392b}
+.spi-score.nd{color:#bdc3c7}
+.spi-max{font-size:13px;color:var(--gray-mid)}
+.spi-bar-wrap{background:#f0f2f5;border-radius:10px;height:5px;overflow:hidden;margin-bottom:5px}
+.spi-bar{height:5px;border-radius:10px;transition:width .6s ease}
+.spi-giudizio{font-size:10px;font-weight:700;letter-spacing:.04em}
+.spi-detail{font-size:10px;color:var(--gray-mid);margin-top:3px}
 
 /* TABELLE */
-.table-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:24px}
-.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.table-card{background:var(--white);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);margin-bottom:20px;overflow-x:auto}
+.data-table{width:100%;border-collapse:collapse;font-size:12px;min-width:500px}
 .data-table th{background:var(--blue);color:#fff;padding:8px 10px;text-align:left;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.data-table td{padding:8px 10px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
+.data-table td{padding:7px 10px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
 .data-table tr:last-child td{border-bottom:none}
 .data-table tr:nth-child(even) td{background:#fafbfc}
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase}
-.badge.ottimo   {background:#e8f5ee;color:#1a7a4a}
-.badge.buono    {background:#eafaf1;color:#27ae60}
-.badge.discreto {background:#fef9e7;color:#f39c12}
-.badge.sufficiente{background:#fdf2e9;color:#e67e22}
-.badge.insufficiente{background:#fdedec;color:#e74c3c}
-.badge.gravemente{background:#fdecea;color:#c0392b}
-.badge.nd       {background:#f0f2f5;color:#7f8c8d}
+.badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase}
+.badge.ottimo{background:#e8f5ee;color:#1a7a4a}.badge.buono{background:#eafaf1;color:#27ae60}
+.badge.discreto{background:#fef9e7;color:#f39c12}.badge.sufficiente{background:#fdf2e9;color:#e67e22}
+.badge.insufficiente{background:#fdedec;color:#e74c3c}.badge.gravemente{background:#fdecea;color:#c0392b}
+.badge.nd{background:#f0f2f5;color:#7f8c8d}
 
-/* CHARTS */
-.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
+/* NC ROWS */
+.nc-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f2f5}
+.nc-row:last-child{border-bottom:none}
+.nc-rank{font-size:16px;font-weight:800;color:var(--gray-mid);width:24px;flex-shrink:0;text-align:center}
+.nc-text{flex:1;font-size:12px;color:var(--text);line-height:1.3}
+.nc-sezione{font-size:10px;color:var(--gray-mid);display:block;margin-top:1px}
+.nc-count{font-size:15px;font-weight:800;color:var(--red)}
+
+/* AC TABLE */
+.btn-chiudi{border:none;border-radius:var(--radius);background:var(--green);color:#fff;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
+.btn-chiudi:hover{background:#156038}
+.btn-chiudi:disabled{background:#bdc3c7;cursor:not-allowed}
+
+/* CHART */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
 @media(max-width:700px){.chart-grid{grid-template-columns:1fr}}
 .chart-card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
 .chart-title{font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px}
 
-/* NC TOP */
-.nc-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f2f5}
-.nc-row:last-child{border-bottom:none}
-.nc-rank{font-size:18px;font-weight:800;color:var(--gray-mid);width:28px;flex-shrink:0;text-align:center}
-.nc-text{flex:1;font-size:12px;color:var(--text);line-height:1.3}
-.nc-sezione{font-size:10px;color:var(--gray-mid);display:block;margin-top:2px}
-.nc-count{font-size:16px;font-weight:800;color:var(--red)}
+/* QR */
+.qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px;margin-bottom:20px}
+.qr-card{background:var(--white);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);text-align:center}
+.qr-card h3{font-size:13px;font-weight:700;color:var(--blue);margin-bottom:4px}
+.qr-card p{font-size:11px;color:var(--gray-mid);margin-bottom:12px}
+.qr-box{display:flex;justify-content:center;margin-bottom:12px}
+.qr-url{font-size:10px;color:var(--gray-mid);word-break:break-all}
 
 /* LOADING */
 .loading{text-align:center;padding:60px 20px;color:var(--gray-mid)}
-.spinner{width:40px;height:40px;border:4px solid #e0e4ea;border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+.spinner{width:36px;height:36px;border:3px solid #e0e4ea;border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px}
 @keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{text-align:center;padding:30px;color:var(--gray-mid);font-size:13px}
 
-/* EMPTY */
-.empty-state{text-align:center;padding:40px;color:var(--gray-mid);font-size:13px}
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal{background:#fff;border-radius:var(--radius);max-width:460px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden}
+.modal-header{background:var(--blue);color:#fff;padding:12px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between}
+.modal-close{background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+.modal-body{padding:16px}
+.modal-footer{padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--gray-border)}
 
-/* RESPONSIVE */
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1e28;color:#fff;padding:9px 18px;border-radius:20px;font-size:12px;font-weight:600;opacity:0;transition:all .3s;z-index:1000;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
 @media(max-width:600px){
-  .filters-inner{gap:8px}
-  .spi-grid{grid-template-columns:1fr}
   .main{padding:12px}
+  .tab-btn{padding:10px 12px;font-size:12px}
+  .spi-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -152,13 +174,22 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
 
 <div class="header">
   <div class="header-inner">
-    <div class="header-brand">
-      <div class="header-title">SOMEC NAVALE<span>HSE Dashboard</span></div>
-    </div>
+    <div class="header-title">SOMEC NAVALE<span>HSE Dashboard — Sistema SPI</span></div>
     <div class="header-badge" id="hdr-period">Caricamento...</div>
   </div>
 </div>
 
+<!-- TABS -->
+<div class="tabs-bar">
+  <div class="tabs-inner">
+    <button class="tab-btn active" onclick="switchTab('spi')">📊 SPI Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('trend')">📈 Trend</button>
+    <button class="tab-btn" onclick="switchTab('ac')">✅ Azioni Correttive</button>
+    <button class="tab-btn" onclick="switchTab('qr')">📱 QR Code App</button>
+  </div>
+</div>
+
+<!-- FILTRI -->
 <div class="filters-bar">
   <div class="filters-inner">
     <div class="filter-group">
@@ -171,16 +202,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
     <div class="filter-group">
       <span class="filter-label">Trimestre</span>
       <select class="filter-select" id="f-trim" onchange="loadData()">
-        <option value="Q1">Q1 (Gen-Mar)</option>
-        <option value="Q2">Q2 (Apr-Giu)</option>
-        <option value="Q3">Q3 (Lug-Set)</option>
-        <option value="Q4">Q4 (Ott-Dic)</option>
+        <option value="Q1">Q1 Gen-Mar</option>
+        <option value="Q2">Q2 Apr-Giu</option>
+        <option value="Q3">Q3 Lug-Set</option>
+        <option value="Q4">Q4 Ott-Dic</option>
       </select>
     </div>
     <div class="filter-group">
       <span class="filter-label">Sito</span>
       <select class="filter-select" id="f-sito" onchange="loadData()">
-        <option value="ALL">Tutti i siti</option>
+        <option value="ALL">Tutti</option>
         <option value="Genova (Fincantieri)">Genova</option>
         <option value="Marghera (Fincantieri)">Marghera</option>
         <option value="Monfalcone (Fincantieri)">Monfalcone</option>
@@ -190,19 +221,63 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
         <option value="Stabilimento Somec — sede principale">Stabilimento</option>
       </select>
     </div>
-    <button class="btn-refresh" onclick="loadData()">↻ Aggiorna</button>
+    <button class="btn-action btn-blue" onclick="loadData()">↻ Aggiorna</button>
+    <button class="btn-action btn-green" onclick="exportExcel()">⬇ Excel</button>
     <span class="last-update" id="last-update"></span>
   </div>
 </div>
 
 <div class="main">
-  <div id="dashboard-content">
-    <div class="loading">
-      <div class="spinner"></div>
-      <div>Caricamento dati da Firestore...</div>
+
+  <!-- TAB: SPI DASHBOARD -->
+  <div id="tab-spi" class="tab-content active">
+    <div id="spi-content"><div class="loading"><div class="spinner"></div><div>Caricamento...</div></div></div>
+  </div>
+
+  <!-- TAB: TREND -->
+  <div id="tab-trend" class="tab-content">
+    <div id="trend-content"><div class="loading"><div class="spinner"></div><div>Caricamento trend...</div></div></div>
+  </div>
+
+  <!-- TAB: AZIONI CORRETTIVE -->
+  <div id="tab-ac" class="tab-content">
+    <div id="ac-content"><div class="loading"><div class="spinner"></div><div>Caricamento AC...</div></div></div>
+  </div>
+
+  <!-- TAB: QR CODE -->
+  <div id="tab-qr" class="tab-content">
+    <div class="section-title">📱 QR Code — Accesso rapido alle app HSE</div>
+    <p style="font-size:12px;color:var(--gray-mid);margin-bottom:16px">Stampa questa pagina e affiggi nei cantieri e stabilimento. Gli operatori possono scansionare il QR per accedere direttamente all'app.</p>
+    <div class="qr-grid" id="qr-grid"></div>
+    <button class="btn-action btn-blue" onclick="window.print()" style="margin-top:8px">🖨️ Stampa QR Code</button>
+  </div>
+
+</div>
+
+<!-- MODAL CHIUSURA AC -->
+<div class="modal-overlay" id="modal-ac">
+  <div class="modal">
+    <div class="modal-header">✅ Chiudi Azione Correttiva<button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;margin-bottom:12px">Stai per segnare come <strong>CHIUSA</strong> la seguente NC:</p>
+      <div id="modal-nc-text" style="font-size:12px;background:#f4f5f7;padding:10px;border-radius:6px;margin-bottom:12px"></div>
+      <div class="filter-group" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Data chiusura</label>
+        <input type="date" id="modal-data-chiusura" style="border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;width:100%">
+      </div>
+      <div class="filter-group" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:10px">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Nota chiusura (opzionale)</label>
+        <textarea id="modal-nota" style="border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;width:100%;min-height:60px;resize:vertical" placeholder="Descrivi l'azione intrapresa..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-action btn-blue" onclick="closeModal()">Annulla</button>
+      <button class="btn-action btn-green" onclick="confirmChiusuraAC()">✅ Conferma chiusura</button>
     </div>
   </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 // ── FIREBASE ──────────────────────────────────────────────
@@ -216,47 +291,55 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 
-// ── PESI SPI (11 indici — Q2 2026+) ──────────────────────
+// ── CONFIG SPI ────────────────────────────────────────────
 const SPI_CONFIG = [
-  { id:'infortuni',    nome:'Infortuni (gg assenza)',           peso:18, max:5, fonte:'safereport' },
-  { id:'nearmiss',     nome:'Near Miss',                        peso:13, max:5, fonte:'safereport' },
-  { id:'segnalazioni', nome:'Segnalazioni cantiere',            peso:13, max:5, fonte:'safereport' },
-  { id:'procedure',    nome:'Procedure sicurezza',              peso:7,  max:5, fonte:'audit_interviste' },
-  { id:'dpi',          nome:'DPI utilizzo/controllo',           peso:11, max:5, fonte:'audit_dpi' },
-  { id:'ispezioni',    nome:'Giorni di ispezione',              peso:13, max:5, fonte:'audit_hse' },
-  { id:'ore',          nome:'Ore lavorate',                     peso:13, max:5, fonte:'manuale' },
-  { id:'unsafe',       nome:'Unsafe Acts/Conditions',           peso:9,  max:5, fonte:'audit_hse' },
-  { id:'ac_chiusura',  nome:'Chiusura Azioni Correttive',       peso:8,  max:5, fonte:'audit_hse' },
-  { id:'conformita',   nome:'Conformità Documentale',           peso:6,  max:5, fonte:'audit_hse' },
-  { id:'formazione',   nome:'Formazione/Briefing erogati',      peso:5,  max:5, fonte:'preposti' },
+  {id:'infortuni',   nome:'Infortuni (gg assenza)',      peso:18,max:5},
+  {id:'nearmiss',    nome:'Near Miss',                   peso:13,max:5},
+  {id:'segnalazioni',nome:'Segnalazioni cantiere',       peso:13,max:5},
+  {id:'procedure',   nome:'Procedure sicurezza',         peso:7, max:5},
+  {id:'dpi',         nome:'DPI utilizzo/controllo',      peso:11,max:5},
+  {id:'ispezioni',   nome:'Giorni di ispezione',         peso:13,max:5},
+  {id:'ore',         nome:'Ore lavorate',                peso:13,max:5},
+  {id:'unsafe',      nome:'Unsafe Acts/Conditions',      peso:9, max:5},
+  {id:'ac_chiusura', nome:'Chiusura Azioni Correttive',  peso:8, max:5},
+  {id:'conformita',  nome:'Conformità Documentale',      peso:6, max:5},
+  {id:'formazione',  nome:'Formazione/Briefing erogati', peso:5, max:5},
 ];
+
+const TRIMESTRI = ['Q1','Q2','Q3','Q4'];
 
 const BANDE = [
-  { min:83, max:100, label:'OTTIMO',                  cls:'ottimo',      color:'#1a7a4a', bg:'#e8f5ee',
-    implic:'Riconoscimento formale. Best practice da condividere con gli altri cantieri.' },
-  { min:70, max:83,  label:'BUONO',                   cls:'buono',       color:'#27ae60', bg:'#eafaf1',
-    implic:'Monitoraggio ordinario trimestrale.' },
-  { min:60, max:70,  label:'DISCRETO',                cls:'discreto',    color:'#f39c12', bg:'#fef9e7',
-    implic:'Verifica trimestrale di mantenimento standard.' },
-  { min:40, max:60,  label:'SUFFICIENTE',             cls:'sufficiente', color:'#e67e22', bg:'#fdf2e9',
-    implic:'Formazione entro 3 mesi + verifica trimestrale.' },
-  { min:20, max:40,  label:'INSUFFICIENTE',           cls:'insufficiente',color:'#e74c3c',bg:'#fdedec',
-    implic:'Comunicazione ufficiale entro 1 mese + formazione mirata + verifica mensile.' },
-  { min:0,  max:20,  label:'GRAVEMENTE INSUFFICIENTE',cls:'gravemente',  color:'#c0392b', bg:'#fdecea',
-    implic:'Comunicazione ufficiale entro 15 gg + piano azione + valutazione esclusione parco fornitori.' },
+  {min:83,max:100,label:'OTTIMO',          cls:'ottimo',      color:'#1a7a4a',bg:'#e8f5ee',implic:'Riconoscimento formale. Best practice da condividere.'},
+  {min:70,max:83, label:'BUONO',           cls:'buono',       color:'#27ae60',bg:'#eafaf1',implic:'Monitoraggio ordinario trimestrale.'},
+  {min:60,max:70, label:'DISCRETO',        cls:'discreto',    color:'#f39c12',bg:'#fef9e7',implic:'Verifica trimestrale di mantenimento standard.'},
+  {min:40,max:60, label:'SUFFICIENTE',     cls:'sufficiente', color:'#e67e22',bg:'#fdf2e9',implic:'Formazione entro 3 mesi + verifica trimestrale.'},
+  {min:20,max:40, label:'INSUFFICIENTE',   cls:'insufficiente',color:'#e74c3c',bg:'#fdedec',implic:'Comunicazione ufficiale entro 1 mese + formazione mirata.'},
+  {min:0, max:20, label:'GRAVEMENTE INSUFF.',cls:'gravemente', color:'#c0392b',bg:'#fdecea',implic:'Comunicazione ufficiale 15 gg + piano azione. Valutazione esclusione parco fornitori.'},
 ];
 
-function getBanda(voto) {
-  return BANDE.find(b => voto >= b.min && voto <= b.max) || BANDE[BANDE.length-1];
-}
+function getBanda(voto){return BANDE.find(b=>voto>=b.min&&voto<=b.max)||BANDE[BANDE.length-1];}
 
 // ── STATO ─────────────────────────────────────────────────
-let DATA = { audits:[], safereports:[], preposti:[] };
+let DATA = {audits:[],safereports:[],preposti:[]};
+let DATA_TREND = {}; // {Q1:{audits,sr,pr}, Q2:{...}...}
+let currentTab = 'spi';
+let pendingAC = null; // {auditId, ncIdx, testo}
+let chartTrend = null, chartNC = null;
+
+// ── TABS ──────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['spi','trend','ac','qr'][i]===tab));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab==='qr') renderQR();
+  if (tab==='trend') renderTrend();
+  if (tab==='ac') renderAC();
+}
 
 // ── INIT ──────────────────────────────────────────────────
-window.addEventListener('load', () => {
-  // Imposta trimestre corrente
-  const m = new Date().getMonth() + 1;
+window.addEventListener('load',()=>{
+  const m = new Date().getMonth()+1;
   const q = m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
   document.getElementById('f-trim').value = q;
   document.getElementById('f-anno').value = new Date().getFullYear();
@@ -270,269 +353,447 @@ async function loadData() {
   const sito = document.getElementById('f-sito').value;
 
   document.getElementById('hdr-period').textContent = `${trim} ${anno}${sito!=='ALL'?' — '+sito.split(' ')[0]:''}`;
-  document.getElementById('dashboard-content').innerHTML = '<div class="loading"><div class="spinner"></div><div>Caricamento...</div></div>';
+  document.getElementById('spi-content').innerHTML = '<div class="loading"><div class="spinner"></div><div>Caricamento...</div></div>';
 
   try {
-    // Query Firestore
-    let qAudit = db.collection('audit_hse').where('anno','==',anno).where('trimestre','==',trim);
-    let qSR    = db.collection('safereport').where('anno','==',anno).where('trimestre','==',trim);
-    let qPrep  = db.collection('preposti').where('anno','==',anno).where('trimestre','==',trim);
+    let qA = db.collection('audit_hse').where('anno','==',anno).where('trimestre','==',trim);
+    let qS = db.collection('safereport').where('anno','==',anno).where('trimestre','==',trim);
+    let qP = db.collection('preposti').where('anno','==',anno).where('trimestre','==',trim);
+    if (sito!=='ALL'){qA=qA.where('sito','==',sito);qS=qS.where('sito','==',sito);qP=qP.where('sito','==',sito);}
 
-    if (sito !== 'ALL') {
-      qAudit = qAudit.where('sito','==',sito);
-      qSR    = qSR.where('sito','==',sito);
-      qPrep  = qPrep.where('sito','==',sito);
-    }
+    const [ra,rs,rp] = await Promise.all([qA.get(),qS.get(),qP.get()]);
+    DATA.audits      = ra.docs.map(d=>({...d.data(),_id:d.id}));
+    DATA.safereports = rs.docs.map(d=>({...d.data(),_id:d.id}));
+    DATA.preposti    = rp.docs.map(d=>({...d.data(),_id:d.id}));
 
-    const [audits, safereports, preposti] = await Promise.all([
-      qAudit.get(), qSR.get(), qPrep.get()
-    ]);
+    // Carica anche trend (tutti i trimestri dell'anno)
+    await loadTrendData(anno, sito);
 
-    DATA.audits      = audits.docs.map(d=>d.data());
-    DATA.safereports = safereports.docs.map(d=>d.data());
-    DATA.preposti    = preposti.docs.map(d=>d.data());
-
-    document.getElementById('last-update').textContent = 'Aggiornato: ' + new Date().toLocaleTimeString('it-IT');
-    renderDashboard(anno, trim, sito);
+    document.getElementById('last-update').textContent = 'Aggiornato: '+new Date().toLocaleTimeString('it-IT');
+    renderSPI(anno,trim,sito);
+    if (currentTab==='trend') renderTrend();
+    if (currentTab==='ac') renderAC();
   } catch(e) {
-    document.getElementById('dashboard-content').innerHTML = `<div class="empty-state">❌ Errore caricamento: ${e.message}</div>`;
+    document.getElementById('spi-content').innerHTML = `<div class="empty-state">❌ Errore: ${e.message}</div>`;
   }
 }
 
-// ── CALCOLO SPI ───────────────────────────────────────────
-function calcSPI() {
-  const a = DATA.audits, sr = DATA.safereports, pr = DATA.preposti;
-  const scores = {};
+async function loadTrendData(anno, sito) {
+  DATA_TREND = {};
+  const promises = TRIMESTRI.map(async trim => {
+    let qA = db.collection('audit_hse').where('anno','==',anno).where('trimestre','==',trim);
+    let qS = db.collection('safereport').where('anno','==',anno).where('trimestre','==',trim);
+    let qP = db.collection('preposti').where('anno','==',anno).where('trimestre','==',trim);
+    if (sito!=='ALL'){qA=qA.where('sito','==',sito);qS=qS.where('sito','==',sito);qP=qP.where('sito','==',sito);}
+    const [ra,rs,rp] = await Promise.all([qA.get(),qS.get(),qP.get()]);
+    DATA_TREND[trim] = {
+      audits:     ra.docs.map(d=>d.data()),
+      safereports:rs.docs.map(d=>d.data()),
+      preposti:   rp.docs.map(d=>d.data()),
+    };
+  });
+  await Promise.all(promises);
+}
 
-  // 1. INFORTUNI
+// ── CALCOLO SPI ───────────────────────────────────────────
+function calcSPI(a,sr,pr) {
+  const scores = {};
   const infortuni = sr.filter(s=>s.tipo==='infortunio');
-  const ggAssenza = infortuni.reduce((sum,s)=>sum+(s.giorni_prognosi||0),0);
+  const ggAssenza = infortuni.reduce((s,x)=>s+(x.giorni_prognosi||0),0);
   scores.infortuni = ggAssenza===0?5:ggAssenza<=5?4:ggAssenza<=15?3:ggAssenza<=30?2:ggAssenza<=60?1:0;
 
-  // 2. NEAR MISS
   const nm = sr.filter(s=>s.tipo==='near_miss');
   scores.nearmiss = nm.length===0?5:nm.length===1?4:nm.length<=3?3:nm.length<=5?2:1;
 
-  // 3. SEGNALAZIONI
-  const segnalazioni = sr.filter(s=>s.tipo==='situazione_pericolosa'||s.tipo==='osservazione');
-  const recidive = sr.filter(s=>s.stato==='aperta' && s.tipo==='near_miss').length;
-  scores.segnalazioni = Math.max(0, (segnalazioni.length===0?5:segnalazioni.length<=2?4:segnalazioni.length<=5?3:segnalazioni.length<=8?2:1) - recidive);
+  const segn = sr.filter(s=>s.tipo==='situazione_pericolosa'||s.tipo==='osservazione');
+  const recidive = sr.filter(s=>s.stato==='aperta'&&s.tipo==='near_miss').length;
+  scores.segnalazioni = Math.max(0,(segn.length===0?5:segn.length<=2?4:segn.length<=5?3:segn.length<=8?2:1)-recidive);
 
-  // 4. PROCEDURE (da interviste audit)
   const interviste = a.flatMap(x=>x.interviste||[]);
-  if (interviste.length === 0) {
-    scores.procedure = null; // N.E.
-  } else {
-    const tot = interviste.length;
-    const conoscono = interviste.filter(i=>!(i.risposte_no||[]).includes('d01') && !(i.risposte_no||[]).includes('d08')).length;
-    scores.procedure = parseFloat(((conoscono/tot)*5).toFixed(1));
-  }
+  if(!interviste.length){scores.procedure=null;}
+  else{const tot=interviste.length;const ok=interviste.filter(i=>!(i.risposte_no||[]).includes('d01')&&!(i.risposte_no||[]).includes('d08')).length;scores.procedure=parseFloat(((ok/tot)*5).toFixed(1));}
 
-  // 5. DPI (da audit_hse score_dpi)
-  if (a.length === 0) { scores.dpi = null; }
-  else { scores.dpi = parseFloat((a.reduce((s,x)=>s+(x.score_dpi||0),0)/a.length).toFixed(1)); }
+  scores.dpi = a.length===0?null:parseFloat((a.reduce((s,x)=>s+(x.score_dpi||0),0)/a.length).toFixed(1));
 
-  // 6. ISPEZIONI
-  const nIspezioni = a.length;
-  scores.ispezioni = nIspezioni>=8?5:nIspezioni>=6?4:nIspezioni>=4?3:nIspezioni>=2?2:nIspezioni>=1?1:0;
+  const nI = a.length;
+  scores.ispezioni = nI>=8?5:nI>=6?4:nI>=4?3:nI>=2?2:nI>=1?1:0;
 
-  // 7. ORE LAVORATE — dato manuale non ancora in Firestore
-  scores.ore = null; // N.E. finché non aggiunto al SafeReport
+  // Ore lavorate — somma da safereport se presente, altrimenti N.E.
+  const oreArr = sr.filter(s=>s.ore_lavorate>0);
+  if(!oreArr.length){scores.ore=null;}
+  else{const tot=oreArr.reduce((s,x)=>s+(x.ore_lavorate||0),0);scores.ore=tot>=2000?5:tot>=1500?4:tot>=1000?3:tot>=500?2:1;}
 
-  // 8. UNSAFE ACTS/CONDITIONS
-  if (a.length === 0) { scores.unsafe = null; }
-  else {
-    const totObs = a.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0);
-    const ratio = totObs / a.length;
-    scores.unsafe = ratio===0?5:ratio<=1?4:ratio<=2?3:ratio<=3?2:ratio<=5?1:0;
-  }
+  if(a.length===0){scores.unsafe=null;}
+  else{const tot=a.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0);const ratio=tot/a.length;scores.unsafe=ratio===0?5:ratio<=1?4:ratio<=2?3:ratio<=3?2:ratio<=5?1:0;}
 
-  // 9. CHIUSURA AC
-  const acAperte = a.reduce((s,x)=>s+(x.ac_aperte||0),0);
-  const acChiuse = a.reduce((s,x)=>s+(x.ac_chiuse||0),0);
-  if (acAperte === 0) { scores.ac_chiusura = 5; }
-  else { scores.ac_chiusura = parseFloat(((acChiuse/acAperte)*5).toFixed(1)); }
+  const acAp=a.reduce((s,x)=>s+(x.ac_aperte||0),0);
+  const acCh=a.reduce((s,x)=>s+(x.ac_chiuse||0),0);
+  scores.ac_chiusura = acAp===0?5:parseFloat(((acCh/acAp)*5).toFixed(1));
 
-  // 10. CONFORMITA DOCUMENTALE
-  const ncDoc = a.reduce((s,x)=>s+(x.conformita_doc||0),0);
-  const totVoci = a.length * 5; // 5 voci documentali per audit
-  if (totVoci===0) { scores.conformita = null; }
-  else { scores.conformita = Math.max(0, parseFloat((5 - (ncDoc/totVoci)*5).toFixed(1))); }
+  const ncDoc=a.reduce((s,x)=>s+(x.conformita_doc||0),0);
+  const tvoci=a.length*5;
+  scores.conformita = tvoci===0?null:Math.max(0,parseFloat((5-(ncDoc/tvoci)*5).toFixed(1)));
 
-  // 11. FORMAZIONE/BRIEFING
-  const nBriefing = pr.reduce((s,p)=>s+(p.briefing_count||0),0);
-  scores.formazione = nBriefing===0?3:nBriefing===1?4:5; // scala premiante
+  const nBrf=pr.reduce((s,p)=>s+(p.briefing_count||0),0);
+  scores.formazione = nBrf===0?3:nBrf===1?4:5;
 
   return scores;
 }
 
-function calcVotoFinale(scores) {
-  let somaPesi = 0, somaScore = 0;
-  SPI_CONFIG.forEach(spi => {
-    const s = scores[spi.id];
-    if (s !== null && s !== undefined) {
-      somaScore += s * spi.peso;
-      somaPesi  += spi.peso;
-    }
-  });
-  if (somaPesi === 0) return 0;
-  // Formula: Voto = (Σ score_i × peso_i) / somaPesi_attivi × 20
-  return parseFloat((somaScore / somaPesi * 20).toFixed(1));
+function calcVoto(scores) {
+  let sp=0,ss=0;
+  SPI_CONFIG.forEach(c=>{const v=scores[c.id];if(v!==null&&v!==undefined){ss+=v*c.peso;sp+=c.peso;}});
+  return sp===0?0:parseFloat((ss/sp*20).toFixed(1));
 }
 
-// ── RENDER ────────────────────────────────────────────────
-function renderDashboard(anno, trim, sito) {
-  const scores = calcSPI();
-  const voto   = calcVotoFinale(scores);
+// ── RENDER SPI ────────────────────────────────────────────
+function renderSPI(anno,trim,sito) {
+  const scores = calcSPI(DATA.audits,DATA.safereports,DATA.preposti);
+  const voto   = calcVoto(scores);
   const banda  = getBanda(voto);
-  const a = DATA.audits, sr = DATA.safereports, pr = DATA.preposti;
+  const a=DATA.audits, sr=DATA.safereports, pr=DATA.preposti;
 
-  let html = '';
+  const nNC=a.reduce((s,x)=>s+(x.cnt_nc||0),0);
+  const nOBS=a.reduce((s,x)=>s+(x.cnt_obs||0),0);
+  const nNM=sr.filter(s=>s.tipo==='near_miss').length;
+  const nBrf=pr.reduce((s,p)=>s+(p.briefing_count||0),0);
 
-  // ── OVERVIEW ──
-  const nNC  = a.reduce((s,x)=>s+(x.cnt_nc||0),0);
-  const nOBS = a.reduce((s,x)=>s+(x.cnt_obs||0),0);
-  const nNM  = sr.filter(s=>s.tipo==='near_miss').length;
-  const nBrf = pr.reduce((s,p)=>s+(p.briefing_count||0),0);
-
-  html += `<div class="overview-grid">
+  let html=`<div class="overview-grid">
     <div class="ov-card blue"><div class="ov-icon">🔍</div><div class="ov-num">${a.length}</div><div class="ov-label">Audit effettuati</div><div class="ov-sub">${trim} ${anno}</div></div>
     <div class="ov-card red"><div class="ov-icon">⚠️</div><div class="ov-num">${nNC}</div><div class="ov-label">Non Conformità</div><div class="ov-sub">${nOBS} Osservazioni</div></div>
     <div class="ov-card amber"><div class="ov-icon">🚨</div><div class="ov-num">${nNM}</div><div class="ov-label">Near Miss</div><div class="ov-sub">${sr.filter(s=>s.tipo==='infortunio').length} Infortuni</div></div>
     <div class="ov-card green"><div class="ov-icon">👷</div><div class="ov-num">${nBrf}</div><div class="ov-label">Briefing HSE</div><div class="ov-sub">${pr.length} controlli preposti</div></div>
   </div>`;
 
-  // ── VOTO FINALE ──
-  html += `<div class="section-title">📊 Voto SPI Finale</div>
+  html+=`<div class="section-title">📊 Voto SPI Finale</div>
   <div class="voto-card">
     <div class="voto-circle" style="background:${banda.bg};color:${banda.color}">
-      <div class="voto-num">${voto}</div>
-      <div class="voto-max">/100</div>
+      <div class="voto-num">${voto}</div><div class="voto-max">/100</div>
     </div>
     <div class="voto-info">
       <h2 style="color:${banda.color}">${banda.label}</h2>
-      <p>Calcolato su ${SPI_CONFIG.filter(s=>scores[s.id]!==null&&scores[s.id]!==undefined).length} di ${SPI_CONFIG.length} indici disponibili${sito!=='ALL'?' per '+sito.split(' ')[0]:' — tutti i siti'}.</p>
+      <p>Calcolato su ${SPI_CONFIG.filter(c=>scores[c.id]!==null&&scores[c.id]!==undefined).length} di ${SPI_CONFIG.length} indici disponibili.</p>
       <div class="voto-implic" style="background:${banda.bg};color:${banda.color}">${banda.implic}</div>
     </div>
   </div>`;
 
-  // ── CARD SPI ──
-  html += `<div class="section-title">📋 Dettaglio 11 Indici SPI</div><div class="spi-grid">`;
-  SPI_CONFIG.forEach(spi => {
-    const s = scores[spi.id];
-    const isND = s === null || s === undefined;
-    const cls  = isND ? 'nd' : getBanda(s/5*100).cls;
-    const giu  = isND ? 'N.E.' : getBanda(s/5*100).label;
-    const pct  = isND ? 0 : (s/5*100);
-    const barColor = isND ? '#bdc3c7' : getBanda(pct).color;
-    html += `<div class="spi-card ${cls}">
-      <div class="spi-header">
-        <span class="spi-name">${spi.nome}</span>
-        <span class="spi-peso">peso ${spi.peso}%</span>
-      </div>
-      <div class="spi-score-row">
-        <span class="spi-score ${cls}">${isND?'—':s}</span>
-        <span class="spi-max">/ ${spi.max}</span>
-      </div>
-      <div class="spi-bar-wrap">
-        <div class="spi-bar" style="width:${pct}%;background:${barColor}"></div>
-      </div>
-      <div class="spi-giudizio" style="color:${barColor}">${giu}</div>
-      ${isND?'<div class="spi-detail">Dati non disponibili per questo periodo</div>':''}
+  html+=`<div class="section-title">📋 Dettaglio 11 Indici SPI</div><div class="spi-grid">`;
+  SPI_CONFIG.forEach(spi=>{
+    const s=scores[spi.id];
+    const isND=s===null||s===undefined;
+    const cls=isND?'nd':getBanda(s/5*100).cls;
+    const pct=isND?0:(s/5*100);
+    const barColor=isND?'#bdc3c7':getBanda(pct).color;
+    html+=`<div class="spi-card ${cls}">
+      <div class="spi-header"><span class="spi-name">${spi.nome}</span><span class="spi-peso">peso ${spi.peso}%</span></div>
+      <div class="spi-score-row"><span class="spi-score ${cls}">${isND?'—':s}</span><span class="spi-max">/ ${spi.max}</span></div>
+      <div class="spi-bar-wrap"><div class="spi-bar" style="width:${pct}%;background:${barColor}"></div></div>
+      <div class="spi-giudizio" style="color:${barColor}">${isND?'N.E.':getBanda(pct).label}</div>
+      ${isND?'<div class="spi-detail">Dati non disponibili</div>':''}
     </div>`;
   });
-  html += '</div>';
+  html+='</div>';
 
-  // ── NC PIÙ RICORRENTI ──
-  const ncAll = a.flatMap(x=>(x.nc_list||[]).map(nc=>({...nc})));
-  const ncMap = {};
-  ncAll.forEach(nc => {
-    const k = nc.voce_id;
-    if (!ncMap[k]) ncMap[k] = { testo: nc.voce_testo||'', sezione: nc.sezione||'', count:0 };
+  // NC PIÙ RICORRENTI
+  const ncMap={};
+  a.flatMap(x=>(x.nc_list||[])).forEach(nc=>{
+    const k=nc.voce_id;
+    if(!ncMap[k]) ncMap[k]={testo:nc.voce_testo||'',sezione:nc.sezione||'',count:0};
     ncMap[k].count++;
   });
-  const ncTop = Object.values(ncMap).sort((a,b)=>b.count-a.count).slice(0,10);
+  const ncTop=Object.values(ncMap).sort((a,b)=>b.count-a.count).slice(0,10);
+  html+=`<div class="section-title">🔴 NC più Ricorrenti</div><div class="table-card">`;
+  if(!ncTop.length) html+='<div class="empty-state">Nessuna NC in questo periodo.</div>';
+  else ncTop.forEach((nc,i)=>{html+=`<div class="nc-row"><span class="nc-rank">${i+1}</span><div class="nc-text">${nc.testo}<span class="nc-sezione">${nc.sezione}</span></div><span class="nc-count">${nc.count}×</span></div>`;});
+  html+='</div>';
 
-  html += `<div class="section-title">🔴 NC più Ricorrenti</div>
-  <div class="table-card">`;
-  if (ncTop.length === 0) {
-    html += '<div class="empty-state">Nessuna NC registrata in questo periodo.</div>';
-  } else {
-    ncTop.forEach((nc,i) => {
-      html += `<div class="nc-row">
-        <span class="nc-rank">${i+1}</span>
-        <div class="nc-text">${nc.testo}<span class="nc-sezione">${nc.sezione}</span></div>
-        <span class="nc-count">${nc.count}×</span>
-      </div>`;
-    });
-  }
-  html += '</div>';
-
-  // ── TABELLA AUDIT PER SITO ──
-  const sitiMap = {};
-  a.forEach(x => {
-    const s = x.sito||'N/D';
-    if (!sitiMap[s]) sitiMap[s] = {sito:s, n:0, nc:0, obs:0, giudizi:[]};
-    sitiMap[s].n++;
-    sitiMap[s].nc  += x.cnt_nc||0;
-    sitiMap[s].obs += x.cnt_obs||0;
-    if (x.giudizio) sitiMap[s].giudizi.push(x.giudizio);
+  // RIEPILOGO PER SITO
+  const sitiMap={};
+  a.forEach(x=>{const s=x.sito||'N/D';if(!sitiMap[s])sitiMap[s]={sito:s,n:0,nc:0,obs:0,giudizi:[]};sitiMap[s].n++;sitiMap[s].nc+=x.cnt_nc||0;sitiMap[s].obs+=x.cnt_obs||0;if(x.giudizio)sitiMap[s].giudizi.push(x.giudizio);});
+  const sitiRows=Object.values(sitiMap).sort((a,b)=>b.nc-a.nc);
+  html+=`<div class="section-title">📍 Riepilogo per Sito</div><div class="table-card"><table class="data-table"><thead><tr><th>Sito</th><th>Audit</th><th>NC</th><th>OBS</th><th>Giudizi</th></tr></thead><tbody>`;
+  if(!sitiRows.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessun audit.</td></tr>';
+  else sitiRows.forEach(r=>{
+    const crit=r.giudizi.filter(g=>g==='CRITICO').length;
+    const ris=r.giudizi.filter(g=>g==='RISERVA').length;
+    const pos=r.giudizi.filter(g=>g==='POSITIVO').length;
+    html+=`<tr><td><strong>${r.sito}</strong></td><td>${r.n}</td><td><strong style="color:var(--red)">${r.nc}</strong></td><td><strong style="color:var(--amber)">${r.obs}</strong></td><td>${pos>0?`<span class="badge ottimo">${pos} pos</span> `:''}${ris>0?`<span class="badge discreto">${ris} ris</span> `:''}${crit>0?`<span class="badge gravemente">${crit} crit</span>`:''}${!r.giudizi.length?'<span class="badge nd">—</span>':''}</td></tr>`;
   });
-  const sitiRows = Object.values(sitiMap).sort((a,b)=>b.nc-a.nc);
+  html+='</tbody></table></div>';
 
-  html += `<div class="section-title">📍 Riepilogo per Sito</div>
-  <div class="table-card">
-  <table class="data-table">
-    <thead><tr><th>Sito</th><th>Audit</th><th>NC</th><th>OBS</th><th>Giudizi</th></tr></thead>
-    <tbody>`;
-  if (sitiRows.length === 0) {
-    html += '<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessun audit in questo periodo.</td></tr>';
-  } else {
-    sitiRows.forEach(r => {
-      const critici = r.giudizi.filter(g=>g==='CRITICO').length;
-      const riserva = r.giudizi.filter(g=>g==='RISERVA').length;
-      const positivi= r.giudizi.filter(g=>g==='POSITIVO').length;
-      html += `<tr>
-        <td><strong>${r.sito}</strong></td>
-        <td>${r.n}</td>
-        <td><strong style="color:var(--red)">${r.nc}</strong></td>
-        <td><strong style="color:var(--amber)">${r.obs}</strong></td>
-        <td>
-          ${positivi>0?`<span class="badge ottimo">${positivi} pos</span> `:''}
-          ${riserva>0?`<span class="badge discreto">${riserva} ris</span> `:''}
-          ${critici>0?`<span class="badge gravemente">${critici} crit</span>`:''}
-          ${r.giudizi.length===0?'<span class="badge nd">—</span>':''}
-        </td>
-      </tr>`;
-    });
-  }
-  html += '</tbody></table></div>';
+  // ULTIMI SAFEREPORT
+  const evRec=[...DATA.safereports].sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||'')).slice(0,5);
+  const tipoL={near_miss:'Near Miss',infortunio:'Infortunio',lesione:'Lesione',emergenza:'Emergenza',situazione_pericolosa:'Situaz. Pericolosa'};
+  html+=`<div class="section-title">🕐 Ultime Segnalazioni SafeReport</div><div class="table-card"><table class="data-table"><thead><tr><th>Protocollo</th><th>Tipo</th><th>Sito</th><th>Data</th><th>Stato</th></tr></thead><tbody>`;
+  if(!evRec.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessuna segnalazione.</td></tr>';
+  else evRec.forEach(e=>{html+=`<tr><td><code style="font-size:10px">${e.id||'—'}</code></td><td>${tipoL[e.tipo]||e.tipo||'—'}</td><td>${(e.sito||'—').split(' ')[0]}</td><td>${(e.data_ora||'—').substring(0,10)}</td><td><span class="badge ${e.stato==='chiusa'?'ottimo':'insufficiente'}">${e.stato||'aperta'}</span></td></tr>`;});
+  html+='</tbody></table></div>';
 
-  // ── ULTIMI EVENTI ──
-  const eventiRecenti = [...sr].sort((a,b)=>b.timestamp?.localeCompare(a.timestamp||'')).slice(0,5);
-  html += `<div class="section-title">🕐 Ultime Segnalazioni SafeReport</div>
-  <div class="table-card">
-  <table class="data-table">
-    <thead><tr><th>Protocollo</th><th>Tipo</th><th>Sito</th><th>Data</th><th>Stato</th></tr></thead>
-    <tbody>`;
-  if (eventiRecenti.length === 0) {
-    html += '<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessuna segnalazione in questo periodo.</td></tr>';
-  } else {
-    const tipoLabel = {near_miss:'Near Miss',infortunio:'Infortunio',lesione:'Lesione',emergenza:'Emergenza',situazione_pericolosa:'Situaz. Pericolosa'};
-    eventiRecenti.forEach(e => {
-      html += `<tr>
-        <td><code style="font-size:11px">${e.id||'—'}</code></td>
-        <td>${tipoLabel[e.tipo]||e.tipo||'—'}</td>
-        <td>${(e.sito||'—').split(' ')[0]}</td>
-        <td>${e.data_ora?.substring(0,10)||'—'}</td>
-        <td><span class="badge ${e.stato==='chiusa'?'ottimo':'insufficiente'}">${e.stato||'aperta'}</span></td>
-      </tr>`;
-    });
-  }
-  html += '</tbody></table></div>';
-
-  document.getElementById('dashboard-content').innerHTML = html;
+  document.getElementById('spi-content').innerHTML=html;
 }
+
+// ── TREND ─────────────────────────────────────────────────
+function renderTrend() {
+  const anno = parseInt(document.getElementById('f-anno').value);
+  const cont = document.getElementById('trend-content');
+
+  const labels = TRIMESTRI;
+  const voti = TRIMESTRI.map(q => {
+    const d = DATA_TREND[q];
+    if (!d) return null;
+    const s = calcSPI(d.audits, d.safereports, d.preposti);
+    return calcVoto(s);
+  });
+
+  const ncPerTrim = TRIMESTRI.map(q => {
+    const d = DATA_TREND[q];
+    if (!d) return 0;
+    return d.audits.reduce((s,x)=>s+(x.cnt_nc||0),0);
+  });
+
+  const nmPerTrim = TRIMESTRI.map(q => {
+    const d = DATA_TREND[q];
+    if (!d) return 0;
+    return d.safereports.filter(s=>s.tipo==='near_miss').length;
+  });
+
+  cont.innerHTML = `
+    <div class="section-title">📈 Trend Voto SPI — Anno ${anno}</div>
+    <div class="chart-grid">
+      <div class="chart-card"><div class="chart-title">Voto SPI per trimestre</div><canvas id="chart-voto" height="200"></canvas></div>
+      <div class="chart-card"><div class="chart-title">NC e Near Miss per trimestre</div><canvas id="chart-nc" height="200"></canvas></div>
+    </div>
+    <div class="section-title">📊 Tabella riepilogativa</div>
+    <div class="table-card">
+    <table class="data-table">
+      <thead><tr><th>Trimestre</th><th>Voto /100</th><th>Giudizio</th><th>Audit</th><th>NC</th><th>Near Miss</th><th>Briefing</th></tr></thead>
+      <tbody>
+      ${TRIMESTRI.map(q=>{
+        const d=DATA_TREND[q]||{audits:[],safereports:[],preposti:[]};
+        const s=calcSPI(d.audits,d.safereports,d.preposti);
+        const v=calcVoto(s);
+        const b=getBanda(v);
+        const hasData=d.audits.length>0||d.safereports.length>0||d.preposti.length>0;
+        return `<tr>
+          <td><strong>${q}</strong></td>
+          <td><strong style="color:${b.color}">${hasData?v:'—'}</strong></td>
+          <td>${hasData?`<span class="badge ${b.cls}">${b.label}</span>`:'<span class="badge nd">N.E.</span>'}</td>
+          <td>${d.audits.length}</td>
+          <td><strong style="color:var(--red)">${d.audits.reduce((s,x)=>s+(x.cnt_nc||0),0)}</strong></td>
+          <td>${d.safereports.filter(s=>s.tipo==='near_miss').length}</td>
+          <td>${d.preposti.reduce((s,p)=>s+(p.briefing_count||0),0)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+
+  // Distruggi chart esistenti
+  if (chartTrend) chartTrend.destroy();
+  if (chartNC) chartNC.destroy();
+
+  const ctx1 = document.getElementById('chart-voto');
+  chartTrend = new Chart(ctx1, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'Voto SPI /100',
+        data:voti,
+        borderColor:'#1a4a7a',
+        backgroundColor:'rgba(26,74,122,.1)',
+        borderWidth:2.5,
+        pointRadius:5,
+        pointBackgroundColor:'#1a4a7a',
+        tension:.3,
+        spanGaps:true,
+      }]
+    },
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{min:0,max:100,grid:{color:'#f0f2f5'},ticks:{color:'#7a8090',font:{size:11}}},x:{grid:{color:'#f0f2f5'},ticks:{color:'#7a8090',font:{size:11}}}}}
+  });
+
+  const ctx2 = document.getElementById('chart-nc');
+  chartNC = new Chart(ctx2, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'NC',data:ncPerTrim,backgroundColor:'rgba(192,57,43,.75)',borderRadius:4},
+        {label:'Near Miss',data:nmPerTrim,backgroundColor:'rgba(160,96,16,.75)',borderRadius:4},
+      ]
+    },
+    options:{responsive:true,plugins:{legend:{labels:{font:{size:11},boxWidth:14}}},scales:{y:{beginAtZero:true,grid:{color:'#f0f2f5'},ticks:{color:'#7a8090',font:{size:11}}},x:{grid:{display:false},ticks:{color:'#7a8090',font:{size:11}}}}}
+  });
+}
+
+// ── AZIONI CORRETTIVE ─────────────────────────────────────
+function renderAC() {
+  const cont = document.getElementById('ac-content');
+  const ncAperte = DATA.audits.flatMap(a => (a.nc_list||[])
+    .filter(nc=>nc.stato_ac!=='chiusa')
+    .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
+  );
+
+  if (!ncAperte.length) {
+    cont.innerHTML = '<div class="empty-state">✅ Nessuna azione correttiva aperta in questo periodo.</div>';
+    return;
+  }
+
+  let html = `<div class="section-title">⚠️ Azioni Correttive Aperte (${ncAperte.length})</div>
+  <div class="table-card"><table class="data-table">
+    <thead><tr><th>Sito</th><th>Impresa</th><th>NC</th><th>Livello</th><th>Scadenza</th><th>Azione</th></tr></thead>
+    <tbody>`;
+
+  ncAperte.forEach((nc,i) => {
+    const scad = nc.scadenza || '—';
+    const oggi = new Date().toISOString().slice(0,10);
+    const scadClass = scad!=='—' && scad < oggi ? 'color:var(--red);font-weight:700' : '';
+    const lvLabel = nc.livello===3?'<span class="badge gravemente">Lv.3 Elevato</span>':nc.livello===2?'<span class="badge insufficiente">Lv.2 Medio</span>':'<span class="badge discreto">Lv.1 Minore</span>';
+    html += `<tr>
+      <td>${(nc.sito||'—').split(' ')[0]}</td>
+      <td>${nc.impresa||'—'}</td>
+      <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
+      <td>${nc.livello?lvLabel:'—'}</td>
+      <td style="${scadClass}">${scad}</td>
+      <td><button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'")}')">Chiudi AC</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+
+function apriModalAC(auditId, idx, testo) {
+  pendingAC = {auditId, idx, testo};
+  document.getElementById('modal-nc-text').textContent = testo;
+  document.getElementById('modal-data-chiusura').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal-nota').value = '';
+  document.getElementById('modal-ac').classList.add('show');
+}
+
+function closeModal() { document.getElementById('modal-ac').classList.remove('show'); pendingAC=null; }
+
+async function confirmChiusuraAC() {
+  if (!pendingAC) return;
+  const dataChiusura = document.getElementById('modal-data-chiusura').value;
+  const nota = document.getElementById('modal-nota').value;
+  if (!dataChiusura) { showToast('⚠️ Inserisci la data di chiusura'); return; }
+
+  try {
+    const auditRef = db.collection('audit_hse').doc(pendingAC.auditId);
+    const snap = await auditRef.get();
+    if (!snap.exists) { showToast('❌ Documento non trovato'); return; }
+    const data = snap.data();
+    const ncList = [...(data.nc_list||[])];
+
+    // Trova la NC per testo (idx potrebbe non corrispondere dopo filtraggio)
+    const ncIdx = ncList.findIndex(nc=>nc.voce_testo===pendingAC.testo&&nc.stato_ac!=='chiusa');
+    if (ncIdx < 0) { showToast('❌ NC non trovata'); return; }
+
+    ncList[ncIdx] = {...ncList[ncIdx], stato_ac:'chiusa', data_chiusura:dataChiusura, nota_chiusura:nota};
+    const acChiuse = ncList.filter(nc=>nc.stato_ac==='chiusa').length;
+
+    await auditRef.update({nc_list:ncList, ac_chiuse:acChiuse});
+    showToast('✅ AC chiusa con successo');
+    closeModal();
+    // Aggiorna dati locali
+    const auditLocal = DATA.audits.find(a=>a._id===pendingAC.auditId);
+    if (auditLocal) { auditLocal.nc_list = ncList; auditLocal.ac_chiuse = acChiuse; }
+    renderAC();
+  } catch(e) {
+    showToast('❌ Errore: '+e.message);
+  }
+}
+
+// ── QR CODE ───────────────────────────────────────────────
+const QR_APPS = [
+  {nome:'SafeReport MS452',   desc:'Segnalazione near miss, infortuni e situazioni pericolose', url:'https://hserspp.github.io/somec-safereport/', color:'#c0392b'},
+  {nome:'App Preposti',       desc:'Checklist periodica per preposti e responsabili di reparto', url:'https://hserspp.github.io/somec-preposti/',   color:'#1a7a4a'},
+  {nome:'Audit HSE',          desc:'Audit MOD7.401 per cantieri e stabilimento',                 url:'https://hserspp.github.io/somec-audit/',      color:'#1a4a7a'},
+  {nome:'Dashboard SPI',      desc:'Monitoraggio Safety Performance Indicators',                  url:'https://hserspp.github.io/somec-dashboard/',  color:'#a06010'},
+];
+
+function renderQR() {
+  const grid = document.getElementById('qr-grid');
+  if (grid.innerHTML.trim()) return; // già renderizzato
+  grid.innerHTML = '';
+  QR_APPS.forEach(app => {
+    const card = document.createElement('div');
+    card.className = 'qr-card';
+    card.innerHTML = `
+      <h3 style="color:${app.color}">${app.nome}</h3>
+      <p>${app.desc}</p>
+      <div class="qr-box" id="qr-${app.nome.replace(/\s/g,'_')}"></div>
+      <div class="qr-url">${app.url}</div>`;
+    grid.appendChild(card);
+    new QRCode(document.getElementById(`qr-${app.nome.replace(/\s/g,'_')}`), {
+      text: app.url, width:140, height:140,
+      colorDark:'#1a1e28', colorLight:'#ffffff',
+    });
+  });
+}
+
+// ── EXPORT EXCEL ──────────────────────────────────────────
+function exportExcel() {
+  const anno = document.getElementById('f-anno').value;
+  const trim = document.getElementById('f-trim').value;
+  const sito = document.getElementById('f-sito').value;
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: SPI
+  const scores = calcSPI(DATA.audits,DATA.safereports,DATA.preposti);
+  const voto = calcVoto(scores);
+  const spiRows = [['INDICE','PESO %','SCORE','MAX','GIUDIZIO']];
+  SPI_CONFIG.forEach(c=>{
+    const s=scores[c.id];
+    spiRows.push([c.nome,c.peso,s??'N.E.',c.max,s!==null&&s!==undefined?getBanda(s/5*100).label:'Non esaminato']);
+  });
+  spiRows.push([]);
+  spiRows.push(['VOTO FINALE',voto,'','/100',getBanda(voto).label]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(spiRows), 'SPI '+trim+' '+anno);
+
+  // Sheet 2: Audit
+  const auditRows = [['Protocollo','Sito','Data','Impresa','Auditor','Giudizio','C','OBS','NC','NA','Conclusioni']];
+  DATA.audits.forEach(a=>{auditRows.push([a.id||'',a.sito||'',a.data_audit||'',a.impresa||'',a.auditor||'',a.giudizio||'',a.cnt_c||0,a.cnt_obs||0,a.cnt_nc||0,a.cnt_na||0,a.conclusioni||'']);});
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(auditRows), 'Audit');
+
+  // Sheet 3: SafeReport
+  const srRows = [['Protocollo','Sito','Tipo','Data','Azienda','Mansione','Descrizione','Giorni assenza','Stato']];
+  DATA.safereports.forEach(s=>{srRows.push([s.id||'',s.sito||'',s.tipo||'',s.data_ora||'',s.azienda||'',s.mansione||'',s.descrizione||'',s.giorni_prognosi||0,s.stato||'aperta']);});
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(srRows), 'SafeReport');
+
+  // Sheet 4: NC Aperte
+  const ncRows = [['Sito','Impresa','Data audit','Voce NC','Sezione','Livello','Scadenza AC','Stato AC']];
+  DATA.audits.flatMap(a=>(a.nc_list||[]).map(nc=>({...nc,sito:a.sito,impresa:a.impresa,data:a.data_audit}))).forEach(nc=>{ncRows.push([nc.sito||'',nc.impresa||'',nc.data||'',nc.voce_testo||'',nc.sezione||'',nc.livello||'',nc.scadenza||'',nc.stato_ac||'aperta']);});
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ncRows), 'NC Aperte');
+
+  XLSX.writeFile(wb, `SPI_HSE_Somec_${trim}_${anno}${sito!=='ALL'?'_'+sito.split(' ')[0]:''}.xlsx`);
+  showToast('✅ Excel scaricato');
+}
+
+// ── NOTIFICHE ─────────────────────────────────────────────
+// Controlla se il voto è sotto soglia e mostra avviso
+function checkNotifiche(voto) {
+  if (voto < 60 && voto > 0) {
+    const banda = getBanda(voto);
+    setTimeout(()=>{
+      if(confirm(`⚠️ ATTENZIONE — Voto SPI: ${voto}/100 (${banda.label})\n\n${banda.implic}\n\nVuoi aprire la scheda Trend per analizzare l'andamento?`)){
+        switchTab('trend');
+      }
+    }, 800);
+  }
+}
+
+// ── UTILITIES ─────────────────────────────────────────────
+function showToast(msg,dur=3000){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+// Intercetta renderSPI per aggiungere notifica
+const _origRenderSPI = renderSPI;
+// Override inline per notifiche automatiche
+const _origLoadData = loadData;
 </script>
 </body>
 </html>
