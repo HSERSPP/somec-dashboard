@@ -278,6 +278,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
   </div>
 </div>
 
+<!-- MODAL GESTIONE OBS -->
+<div class="modal-overlay" id="modal-obs">
+  <div class="modal">
+    <div class="modal-header" id="modal-obs-header">👁 Gestione Osservazione<button class="modal-close" onclick="closeModalOBS()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;margin-bottom:12px" id="modal-obs-desc"></p>
+      <div id="modal-obs-text" style="font-size:12px;background:#f4f5f7;padding:10px;border-radius:6px;margin-bottom:12px"></div>
+      <div class="filter-group" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Data</label>
+        <input type="date" id="modal-obs-data" style="border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;width:100%">
+      </div>
+      <div class="filter-group" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:10px">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase" id="modal-obs-nota-label">Motivazione (opzionale)</label>
+        <textarea id="modal-obs-nota" style="border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;width:100%;min-height:60px;resize:vertical" placeholder="Descrivi perche' l'OBS viene chiusa o elevata a NC..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-action btn-blue" onclick="closeModalOBS()">Annulla</button>
+      <button class="btn-action btn-green" id="modal-obs-confirm" onclick="confirmGestioneOBS()">Conferma</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -702,8 +725,8 @@ function renderAC() {
         <td>${obs.priorita?obsLvLabel(obs.priorita):'—'}</td>
         <td>${obs.data_audit||'—'}</td>
         <td style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="chiudiOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','risolto')">✅ Risolto</button>
-          <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="chiudiOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','escalato')">⬆ Escalato NC</button>
+          <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','risolto')">✅ Risolto</button>
+          <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','elevato')">⬆ Eleva a NC</button>
         </td>
       </tr>`;
     });
@@ -731,24 +754,93 @@ function renderAC() {
   }
   html += '</tbody></table></div>';
 
+  // ── SEZIONE 4: STORICO OBS RISOLTE/ELEVATE ──
+  const obsStorico = DATA.audits.flatMap(a => (a.obs_list||[])
+    .filter(obs=>obs.stato_obs==='risolto'||obs.stato_obs==='elevato')
+    .map(obs=>({...obs, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
+  ).sort((a,b)=>(b.data_aggiornamento||'').localeCompare(a.data_aggiornamento||''));
+
+  html += `<div class="section-title" style="margin-top:20px">📋 Storico OBS Chiuse/Elevate (${obsStorico.length})</div>
+  <div class="table-card"><table class="data-table">
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Osservazione</th><th>Priorita</th><th>Esito</th><th>Data</th><th>Motivazione</th></tr></thead>
+    <tbody>`;
+  if (!obsStorico.length) {
+    html += '<tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna OBS chiusa o elevata in questo periodo.</td></tr>';
+  } else {
+    obsStorico.forEach(obs => {
+      const esitoLabel = obs.stato_obs==='risolto'
+        ? '<span class="badge ottimo">✅ Risolto</span>'
+        : '<span class="badge gravemente">⬆ Elevata a NC</span>';
+      html += `<tr>
+        <td>${(obs.sito||'—').split(' ')[0]}</td>
+        <td>${obs.impresa||'—'}</td>
+        <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}</td>
+        <td>${obs.priorita?obsLvLabel(obs.priorita):'—'}</td>
+        <td>${esitoLabel}</td>
+        <td>${obs.data_aggiornamento||'—'}</td>
+        <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${obs.nota_gestione||'—'}</td>
+      </tr>`;
+    });
+  }
+  html += '</tbody></table></div>';
+
   cont.innerHTML = html;
 }
 
-async function chiudiOBS(auditId, voceId, stato) {
-  const label = stato==='risolto' ? 'RISOLTO' : 'ESCALATO A NC';
-  if (!confirm(`Segnare questa OBS come ${label}?`)) return;
+let pendingOBS = null;
+
+function apriModalOBS(auditId, voceId, testo, stato) {
+  pendingOBS = {auditId, voceId, stato};
+  const isRisolto = stato === 'risolto';
+  document.getElementById('modal-obs-header').innerHTML =
+    (isRisolto ? '✅ Chiudi OBS come Risolta' : '⬆ Eleva OBS a NC') +
+    '<button class="modal-close" onclick="closeModalOBS()">×</button>';
+  document.getElementById('modal-obs-desc').innerHTML =
+    isRisolto
+      ? 'Stai per segnare come <strong>RISOLTA</strong> la seguente osservazione:'
+      : 'Stai per <strong>ELEVARE A NC</strong> la seguente osservazione:';
+  document.getElementById('modal-obs-text').textContent = testo;
+  document.getElementById('modal-obs-data').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal-obs-nota').value = '';
+  document.getElementById('modal-obs-nota').placeholder =
+    isRisolto ? 'Descrivi come e perche la OBS e stata risolta...' : 'Descrivi perche l\'OBS viene elevata a NC e quali azioni immediate sono state adottate...';
+  document.getElementById('modal-obs-confirm').textContent =
+    isRisolto ? '✅ Conferma chiusura' : '⬆ Conferma elevazione a NC';
+  document.getElementById('modal-obs-confirm').style.background =
+    isRisolto ? '#1a7a4a' : '#c0392b';
+  document.getElementById('modal-obs').classList.add('show');
+}
+
+function closeModalOBS() {
+  document.getElementById('modal-obs').classList.remove('show');
+  pendingOBS = null;
+}
+
+async function confirmGestioneOBS() {
+  if (!pendingOBS) return;
+  const dataAgg = document.getElementById('modal-obs-data').value;
+  const nota = document.getElementById('modal-obs-nota').value;
+  if (!dataAgg) { showToast('⚠️ Inserisci la data'); return; }
+
   try {
-    const auditRef = db.collection('audit_hse').doc(auditId);
+    const auditRef = db.collection('audit_hse').doc(pendingOBS.auditId);
     const snap = await auditRef.get();
     if (!snap.exists) { showToast('❌ Documento non trovato'); return; }
     const data = snap.data();
     const obsList = [...(data.obs_list||[])];
-    const idx = obsList.findIndex(o=>o.voce_id===voceId);
+    const idx = obsList.findIndex(o=>o.voce_id===pendingOBS.voceId);
     if (idx < 0) { showToast('❌ OBS non trovata'); return; }
-    obsList[idx] = {...obsList[idx], stato_obs:stato, data_aggiornamento:new Date().toISOString().slice(0,10)};
-    await auditRef.update({obs_list:obsList});
+    obsList[idx] = {
+      ...obsList[idx],
+      stato_obs: pendingOBS.stato,
+      data_aggiornamento: dataAgg,
+      nota_gestione: nota,
+    };
+    await auditRef.update({obs_list: obsList});
+    const label = pendingOBS.stato === 'risolto' ? 'RISOLTA' : 'ELEVATA A NC';
     showToast(`✅ OBS segnata come ${label}`);
-    const auditLocal = DATA.audits.find(a=>a._id===auditId);
+    closeModalOBS();
+    const auditLocal = DATA.audits.find(a=>a._id===pendingOBS.auditId);
     if (auditLocal) auditLocal.obs_list = obsList;
     renderAC();
   } catch(e) { showToast('❌ Errore: '+e.message); }
