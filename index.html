@@ -200,8 +200,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
       </select>
     </div>
     <div class="filter-group">
-      <span class="filter-label">Trimestre</span>
+      <span class="filter-label">Periodo</span>
       <select class="filter-select" id="f-trim" onchange="loadData()">
+        <option value="ANNO">Da inizio anno</option>
         <option value="Q1">Q1 Gen-Mar</option>
         <option value="Q2">Q2 Apr-Giu</option>
         <option value="Q3">Q3 Lug-Set</option>
@@ -218,7 +219,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
         <option value="Turku (Meyer)">Turku</option>
         <option value="Saint-Nazaire (Chantiers de l'Atlantique)">Saint-Nazaire</option>
         <option value="Papenburg (Meyer Werft)">Papenburg</option>
-        <option value="Stabilimento Somec — sede principale">Stabilimento</option>
+        <option value="Stabilimento Somec -- sede principale">Stabilimento</option>
       </select>
     </div>
     <button class="btn-action btn-blue" onclick="loadData()">↻ Aggiorna</button>
@@ -351,14 +352,22 @@ async function loadData() {
   const anno = parseInt(document.getElementById('f-anno').value);
   const trim = document.getElementById('f-trim').value;
   const sito = document.getElementById('f-sito').value;
+  const isAnnoIntero = trim === 'ANNO';
 
-  document.getElementById('hdr-period').textContent = `${trim} ${anno}${sito!=='ALL'?' — '+sito.split(' ')[0]:''}`;
+  const periodoLabel = isAnnoIntero ? `Anno ${anno}` : `${trim} ${anno}`;
+  document.getElementById('hdr-period').textContent = `${periodoLabel}${sito!=='ALL'?' — '+sito.split(' ')[0]:''}`;
   document.getElementById('spi-content').innerHTML = '<div class="loading"><div class="spinner"></div><div>Caricamento...</div></div>';
 
   try {
-    let qA = db.collection('audit_hse').where('anno','==',anno).where('trimestre','==',trim);
-    let qS = db.collection('safereport').where('anno','==',anno).where('trimestre','==',trim);
-    let qP = db.collection('preposti').where('anno','==',anno).where('trimestre','==',trim);
+    // Se ANNO: carica tutti i trimestri senza filtro
+    let qA = db.collection('audit_hse').where('anno','==',anno);
+    let qS = db.collection('safereport').where('anno','==',anno);
+    let qP = db.collection('preposti').where('anno','==',anno);
+    if (!isAnnoIntero) {
+      qA = qA.where('trimestre','==',trim);
+      qS = qS.where('trimestre','==',trim);
+      qP = qP.where('trimestre','==',trim);
+    }
     if (sito!=='ALL'){qA=qA.where('sito','==',sito);qS=qS.where('sito','==',sito);qP=qP.where('sito','==',sito);}
 
     const [ra,rs,rp] = await Promise.all([qA.get(),qS.get(),qP.get()]);
@@ -370,7 +379,7 @@ async function loadData() {
     await loadTrendData(anno, sito);
 
     document.getElementById('last-update').textContent = 'Aggiornato: '+new Date().toLocaleTimeString('it-IT');
-    renderSPI(anno,trim,sito);
+    renderSPI(anno, isAnnoIntero ? 'Anno' : trim, sito);
     if (currentTab==='trend') renderTrend();
     if (currentTab==='ac') renderAC();
   } catch(e) {
