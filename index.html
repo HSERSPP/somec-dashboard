@@ -638,37 +638,120 @@ function renderTrend() {
 // ── AZIONI CORRETTIVE ─────────────────────────────────────
 function renderAC() {
   const cont = document.getElementById('ac-content');
+  const oggi = new Date().toISOString().slice(0,10);
+
+  // Raccogli NC aperte
   const ncAperte = DATA.audits.flatMap(a => (a.nc_list||[])
     .filter(nc=>nc.stato_ac!=='chiusa')
     .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
   );
 
-  if (!ncAperte.length) {
-    cont.innerHTML = '<div class="empty-state">✅ Nessuna azione correttiva aperta in questo periodo.</div>';
-    return;
-  }
+  // Raccogli NC chiuse
+  const ncChiuse = DATA.audits.flatMap(a => (a.nc_list||[])
+    .filter(nc=>nc.stato_ac==='chiusa')
+    .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
+  ).sort((a,b)=>(b.data_chiusura||'').localeCompare(a.data_chiusura||''));
 
-  let html = `<div class="section-title">⚠️ Azioni Correttive Aperte (${ncAperte.length})</div>
+  // Raccogli OBS
+  const obsAll = DATA.audits.flatMap(a => (a.obs_list||[])
+    .filter(obs=>obs.stato_obs!=='risolto'&&obs.stato_obs!=='escalato')
+    .map(obs=>({...obs, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
+  );
+
+  const lvLabel = lv => lv===3?'<span class="badge gravemente">Lv.3 Elevato</span>':lv===2?'<span class="badge insufficiente">Lv.2 Medio</span>':'<span class="badge discreto">Lv.1 Minore</span>';
+  const obsLvLabel = lv => lv===3?'<span class="badge gravemente">Alta</span>':lv===2?'<span class="badge discreto">Media</span>':'<span class="badge nd">Bassa</span>';
+
+  let html = '';
+
+  // ── SEZIONE 1: NC APERTE ──
+  html += `<div class="section-title">⚠️ NC Aperte — Azioni Correttive (${ncAperte.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Sito</th><th>Impresa</th><th>NC</th><th>Livello</th><th>Scadenza</th><th>Azione</th></tr></thead>
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Non Conformita</th><th>Livello</th><th>Scadenza</th><th>Azione</th></tr></thead>
     <tbody>`;
-
-  ncAperte.forEach((nc,i) => {
-    const scad = nc.scadenza || '—';
-    const oggi = new Date().toISOString().slice(0,10);
-    const scadClass = scad!=='—' && scad < oggi ? 'color:var(--red);font-weight:700' : '';
-    const lvLabel = nc.livello===3?'<span class="badge gravemente">Lv.3 Elevato</span>':nc.livello===2?'<span class="badge insufficiente">Lv.2 Medio</span>':'<span class="badge discreto">Lv.1 Minore</span>';
-    html += `<tr>
-      <td>${(nc.sito||'—').split(' ')[0]}</td>
-      <td>${nc.impresa||'—'}</td>
-      <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
-      <td>${nc.livello?lvLabel:'—'}</td>
-      <td style="${scadClass}">${scad}</td>
-      <td><button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'")}')">Chiudi AC</button></td>
-    </tr>`;
-  });
+  if (!ncAperte.length) {
+    html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">✅ Nessuna NC aperta in questo periodo.</td></tr>';
+  } else {
+    ncAperte.forEach((nc,i) => {
+      const scad = nc.scadenza || '—';
+      const scadStyle = scad!=='—' && scad < oggi ? 'color:var(--red);font-weight:700' : '';
+      html += `<tr>
+        <td>${(nc.sito||'—').split(' ')[0]}</td>
+        <td>${nc.impresa||'—'}</td>
+        <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
+        <td>${nc.livello?lvLabel(nc.livello):'—'}</td>
+        <td style="${scadStyle}">${scad}</td>
+        <td><button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'")}')">Chiudi AC</button></td>
+      </tr>`;
+    });
+  }
   html += '</tbody></table></div>';
+
+  // ── SEZIONE 2: OBS IN MONITORAGGIO ──
+  html += `<div class="section-title" style="margin-top:20px">👁 OBS in Monitoraggio (${obsAll.length})</div>
+  <div class="table-card"><table class="data-table">
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Osservazione</th><th>Priorita</th><th>Data audit</th><th>Azione</th></tr></thead>
+    <tbody>`;
+  if (!obsAll.length) {
+    html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna OBS in monitoraggio.</td></tr>';
+  } else {
+    obsAll.forEach((obs,i) => {
+      html += `<tr>
+        <td>${(obs.sito||'—').split(' ')[0]}</td>
+        <td>${obs.impresa||'—'}</td>
+        <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${obs.sezione||''}</span></td>
+        <td>${obs.priorita?obsLvLabel(obs.priorita):'—'}</td>
+        <td>${obs.data_audit||'—'}</td>
+        <td style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="chiudiOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','risolto')">✅ Risolto</button>
+          <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="chiudiOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','escalato')">⬆ Escalato NC</button>
+        </td>
+      </tr>`;
+    });
+  }
+  html += '</tbody></table></div>';
+
+  // ── SEZIONE 3: STORICO NC CHIUSE ──
+  html += `<div class="section-title" style="margin-top:20px">✅ Storico NC Chiuse (${ncChiuse.length})</div>
+  <div class="table-card"><table class="data-table">
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Non Conformita</th><th>Livello</th><th>Data chiusura</th><th>Nota chiusura</th></tr></thead>
+    <tbody>`;
+  if (!ncChiuse.length) {
+    html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna NC chiusa in questo periodo.</td></tr>';
+  } else {
+    ncChiuse.forEach(nc => {
+      html += `<tr>
+        <td>${(nc.sito||'—').split(' ')[0]}</td>
+        <td>${nc.impresa||'—'}</td>
+        <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
+        <td>${nc.livello?lvLabel(nc.livello):'—'}</td>
+        <td style="color:var(--green);font-weight:700">${nc.data_chiusura||'—'}</td>
+        <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${nc.nota_chiusura||'—'}</td>
+      </tr>`;
+    });
+  }
+  html += '</tbody></table></div>';
+
   cont.innerHTML = html;
+}
+
+async function chiudiOBS(auditId, voceId, stato) {
+  const label = stato==='risolto' ? 'RISOLTO' : 'ESCALATO A NC';
+  if (!confirm(`Segnare questa OBS come ${label}?`)) return;
+  try {
+    const auditRef = db.collection('audit_hse').doc(auditId);
+    const snap = await auditRef.get();
+    if (!snap.exists) { showToast('❌ Documento non trovato'); return; }
+    const data = snap.data();
+    const obsList = [...(data.obs_list||[])];
+    const idx = obsList.findIndex(o=>o.voce_id===voceId);
+    if (idx < 0) { showToast('❌ OBS non trovata'); return; }
+    obsList[idx] = {...obsList[idx], stato_obs:stato, data_aggiornamento:new Date().toISOString().slice(0,10)};
+    await auditRef.update({obs_list:obsList});
+    showToast(`✅ OBS segnata come ${label}`);
+    const auditLocal = DATA.audits.find(a=>a._id===auditId);
+    if (auditLocal) auditLocal.obs_list = obsList;
+    renderAC();
+  } catch(e) { showToast('❌ Errore: '+e.message); }
 }
 
 function apriModalAC(auditId, idx, testo) {
