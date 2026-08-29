@@ -393,10 +393,23 @@ async function loadData() {
     }
     if (sito!=='ALL'){qA=qA.where('sito','==',sito);qS=qS.where('sito','==',sito);qP=qP.where('sito','==',sito);}
 
-    const [ra,rs,rp] = await Promise.all([qA.get(),qS.get(),qP.get()]);
+    // Le segnalazioni HSE le carichiamo SEMPRE per tutto l'anno (multi-trimestre)
+    // cosi nel tab AC si vedono tutte le aperte indipendentemente dal periodo
+    let qSAll = db.collection('safereport').where('anno','==',anno);
+    if (sito!=='ALL') qSAll = qSAll.where('sito','==',sito);
+    // Includi anche anno precedente per segnalazioni aperte da Q4 2025
+    let qSPrev = db.collection('safereport').where('anno','==',anno-1);
+    if (sito!=='ALL') qSPrev = qSPrev.where('sito','==',sito);
+
+    const [ra,rs,rp,rSAll,rSPrev] = await Promise.all([qA.get(),qS.get(),qP.get(),qSAll.get(),qSPrev.get()]);
     DATA.audits      = ra.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.safereports = rs.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.preposti    = rp.docs.map(d=>({...d.data(),_id:d.id}));
+    // Array completo per tab AC (tutto l'anno + anno precedente)
+    const allIds = new Set();
+    DATA.safereports_all = [...rSAll.docs,...rSPrev.docs]
+      .filter(d=>{ if(allIds.has(d.id)) return false; allIds.add(d.id); return true; })
+      .map(d=>({...d.data(),_id:d.id}));
 
     // Carica anche trend (tutti i trimestri dell'anno)
     await loadTrendData(anno, sito);
@@ -791,13 +804,14 @@ function renderAC() {
   html += '</tbody></table></div>';
 
   // ── SEZIONE 5: SEGNALAZIONI HSE APERTE ──
-  // Include tutte le segnalazioni dalla collezione safereport (RSPP + altri)
-  const rsppAperte = DATA.safereports.filter(s=>
+  // Usa safereports_all = tutto l'anno + anno precedente, indipendentemente dal trimestre
+  const srAll = DATA.safereports_all || DATA.safereports;
+  const rsppAperte = srAll.filter(s=>
     s.tipo!=='infortunio' && s.tipo!=='near_miss' &&
     s.stato!=='chiusa'
   ).sort((a,b)=>(a.data_ora||'').localeCompare(b.data_ora||''));
 
-  const rsppChiuse = DATA.safereports.filter(s=>
+  const rsppChiuse = srAll.filter(s=>
     s.tipo!=='infortunio' && s.tipo!=='near_miss' &&
     s.stato==='chiusa'
   ).sort((a,b)=>(b.data_chiusura||'').localeCompare(a.data_chiusura||''));
