@@ -541,15 +541,21 @@ function renderSPI(anno,trim,sito) {
 
   // RIEPILOGO PER SITO
   const sitiMap={};
-  a.forEach(x=>{const s=x.sito||'N/D';if(!sitiMap[s])sitiMap[s]={sito:s,n:0,nc:0,obs:0,giudizi:[]};sitiMap[s].n++;sitiMap[s].nc+=x.cnt_nc||0;sitiMap[s].obs+=x.cnt_obs||0;if(x.giudizio)sitiMap[s].giudizi.push(x.giudizio);});
+  a.forEach(x=>{const s=x.sito||'N/D';if(!sitiMap[s])sitiMap[s]={sito:s,n:0,nc:0,obs:0,giudizi:[],segn:0};sitiMap[s].n++;sitiMap[s].nc+=x.cnt_nc||0;sitiMap[s].obs+=x.cnt_obs||0;if(x.giudizio)sitiMap[s].giudizi.push(x.giudizio);});
+  // Aggiungi anche i siti con sole segnalazioni SafeReport (es. Stabilimento)
+  DATA.safereports.forEach(x=>{
+    const s=x.sito||'N/D';
+    if(!sitiMap[s])sitiMap[s]={sito:s,n:0,nc:0,obs:0,giudizi:[],segn:0};
+    sitiMap[s].segn=(sitiMap[s].segn||0)+1;
+  });
   const sitiRows=Object.values(sitiMap).sort((a,b)=>b.nc-a.nc);
-  html+=`<div class="section-title">📍 Riepilogo per Sito</div><div class="table-card"><table class="data-table"><thead><tr><th>Sito</th><th>Audit</th><th>NC</th><th>OBS</th><th>Giudizi</th></tr></thead><tbody>`;
-  if(!sitiRows.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessun audit.</td></tr>';
+  html+=`<div class="section-title">📍 Riepilogo per Sito</div><div class="table-card"><table class="data-table"><thead><tr><th>Sito</th><th>Audit</th><th>NC</th><th>OBS</th><th>Segnalazioni</th><th>Giudizi</th></tr></thead><tbody>`;
+  if(!sitiRows.length) html+='<tr><td colspan="6" style="text-align:center;color:var(--gray-mid)">Nessun dato.</td></tr>';
   else sitiRows.forEach(r=>{
     const crit=r.giudizi.filter(g=>g==='CRITICO').length;
     const ris=r.giudizi.filter(g=>g==='RISERVA').length;
     const pos=r.giudizi.filter(g=>g==='POSITIVO').length;
-    html+=`<tr><td><strong>${r.sito}</strong></td><td>${r.n}</td><td><strong style="color:var(--red)">${r.nc}</strong></td><td><strong style="color:var(--amber)">${r.obs}</strong></td><td>${pos>0?`<span class="badge ottimo">${pos} pos</span> `:''}${ris>0?`<span class="badge discreto">${ris} ris</span> `:''}${crit>0?`<span class="badge gravemente">${crit} crit</span>`:''}${!r.giudizi.length?'<span class="badge nd">—</span>':''}</td></tr>`;
+    html+=`<tr><td><strong>${r.sito.split('(')[0].trim()}</strong></td><td>${r.n||0}</td><td><strong style="color:var(--red)">${r.nc}</strong></td><td><strong style="color:var(--amber)">${r.obs}</strong></td><td><strong style="color:var(--blue)">${r.segn||0}</strong></td><td>${pos>0?`<span class="badge ottimo">${pos} pos</span> `:''}${ris>0?`<span class="badge discreto">${ris} ris</span> `:''}${crit>0?`<span class="badge gravemente">${crit} crit</span>`:''}${!r.giudizi.length?'<span class="badge nd">—</span>':''}</td></tr>`;
   });
   html+='</tbody></table></div>';
 
@@ -779,6 +785,65 @@ function renderAC() {
         <td>${esitoLabel}</td>
         <td>${obs.data_aggiornamento||'—'}</td>
         <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${obs.nota_gestione||'—'}</td>
+      </tr>`;
+    });
+  }
+  html += '</tbody></table></div>';
+
+  // ── SEZIONE 5: SEGNALAZIONI RSPP APERTE ──
+  const rsppAperte = DATA.safereports.filter(s=>
+    (s.fonte==='rspp_import'||s.segnalato_da?.includes('RSPP')) &&
+    s.tipo!=='infortunio' && s.tipo!=='near_miss' &&
+    s.stato!=='chiusa'
+  ).sort((a,b)=>(a.data_ora||'').localeCompare(b.data_ora||''));
+
+  const rsppChiuse = DATA.safereports.filter(s=>
+    (s.fonte==='rspp_import'||s.segnalato_da?.includes('RSPP')) &&
+    s.tipo!=='infortunio' && s.tipo!=='near_miss' &&
+    s.stato==='chiusa'
+  ).sort((a,b)=>(b.data_chiusura||'').localeCompare(a.data_chiusura||''));
+
+  const tipoRsppLabel = t => ({
+    situazione_pericolosa:'⚠️ Unsafe Condition',
+    comunicazione_organizzativa:'📋 Organizzativa',
+    near_miss:'🚨 Near Miss',
+  }[t]||t);
+
+  html += `<div class="section-title" style="margin-top:20px">📧 Segnalazioni RSPP Aperte (${rsppAperte.length})</div>
+  <div class="table-card"><table class="data-table">
+    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Destinatario</th><th>Scadenza</th></tr></thead>
+    <tbody>`;
+  if (!rsppAperte.length) {
+    html += '<tr><td colspan="5" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna segnalazione RSPP aperta.</td></tr>';
+  } else {
+    rsppAperte.forEach(s => {
+      const scad = s.scadenza || '—';
+      const scadStyle = scad!=='—' && scad < oggi ? 'color:var(--red);font-weight:700' : '';
+      html += `<tr>
+        <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
+        <td>${tipoRsppLabel(s.tipo)}</td>
+        <td style="font-size:11px">${(s.descrizione||'—').substring(0,120)}...</td>
+        <td style="font-size:11px">${s.destinatario||'—'}</td>
+        <td style="${scadStyle}">${scad}</td>
+      </tr>`;
+    });
+  }
+  html += '</tbody></table></div>';
+
+  html += `<div class="section-title" style="margin-top:20px">✅ Segnalazioni RSPP Chiuse (${rsppChiuse.length})</div>
+  <div class="table-card"><table class="data-table">
+    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Data chiusura</th><th>Come risolta</th></tr></thead>
+    <tbody>`;
+  if (!rsppChiuse.length) {
+    html += '<tr><td colspan="5" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna segnalazione chiusa.</td></tr>';
+  } else {
+    rsppChiuse.forEach(s => {
+      html += `<tr>
+        <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
+        <td>${tipoRsppLabel(s.tipo)}</td>
+        <td style="font-size:11px">${(s.descrizione||'—').substring(0,100)}...</td>
+        <td style="color:var(--green);font-weight:700;white-space:nowrap">${s.data_chiusura||'—'}</td>
+        <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${(s.nota_chiusura||'—').substring(0,100)}</td>
       </tr>`;
     });
   }
