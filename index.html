@@ -63,7 +63,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
 .ov-icon{font-size:22px;margin-bottom:4px}
 .ov-num{font-size:28px;font-weight:800;line-height:1}
 .ov-label{font-size:11px;font-weight:600;color:var(--gray-mid);text-transform:uppercase;letter-spacing:.04em}
-.ov-sub{font-size:13px;color:var(--gray-mid);margin-top:2px;font-weight:600}
+.ov-sub{font-size:11px;color:var(--gray-mid);margin-top:8px;display:flex;align-items:baseline;gap:5px}
+.ov-sub-num{font-size:28px;font-weight:800;line-height:1}
+.ov-sub-label{font-size:11px;font-weight:600;color:var(--gray-mid);text-transform:uppercase;letter-spacing:.04em}
 .ov-card.green .ov-num{color:var(--green)}
 .ov-card.amber .ov-num{color:var(--amber)}
 .ov-card.red   .ov-num{color:var(--red)}
@@ -620,10 +622,10 @@ function renderSPI(anno,trim,sito) {
   const nBrf=pr.reduce((s,p)=>s+(p.briefing_count||0),0);
 
   let html=`<div class="overview-grid">
-    <div class="ov-card blue"><div class="ov-icon">🔍</div><div class="ov-num">${a.length}</div><div class="ov-label">Audit effettuati</div><div class="ov-sub">${trim} ${anno}</div></div>
-    <div class="ov-card red"><div class="ov-icon">⚠️</div><div class="ov-num">${nNC}</div><div class="ov-label">Non Conformità</div><div class="ov-sub">${nOBS} Osservazioni</div></div>
-    <div class="ov-card amber"><div class="ov-icon">🚨</div><div class="ov-num">${nNM}</div><div class="ov-label">Near Miss</div><div class="ov-sub">${nInf} Infortuni</div></div>
-    <div class="ov-card green"><div class="ov-icon">👷</div><div class="ov-num">${nBrf}</div><div class="ov-label">Briefing HSE</div><div class="ov-sub">${pr.length} controlli preposti</div></div>
+    <div class="ov-card blue"><div class="ov-icon">🔍</div><div class="ov-num">${a.length}</div><div class="ov-label">Audit effettuati</div><div class="ov-sub"><span class="ov-sub-label">${trim} ${anno}</span></div></div>
+    <div class="ov-card red"><div class="ov-icon">⚠️</div><div class="ov-num">${nNC}</div><div class="ov-label">Non Conformità</div><div class="ov-sub"><span class="ov-sub-num" style="color:var(--amber)">${nOBS}</span><span class="ov-sub-label">Osservazioni</span></div></div>
+    <div class="ov-card amber"><div class="ov-icon">🚨</div><div class="ov-num">${nNM}</div><div class="ov-label">Near Miss</div><div class="ov-sub"><span class="ov-sub-num" style="color:var(--red)">${nInf}</span><span class="ov-sub-label">Infortuni</span></div></div>
+    <div class="ov-card green"><div class="ov-icon">👷</div><div class="ov-num">${nBrf}</div><div class="ov-label">Briefing HSE</div><div class="ov-sub"><span class="ov-sub-num" style="color:var(--green)">${pr.length}</span><span class="ov-sub-label">Controlli preposti</span></div></div>
   </div>`;
 
   html+=`<div class="section-title">📊 Voto SPI Finale</div>
