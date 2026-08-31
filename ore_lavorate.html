@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ore Lavorate — Somec HSE</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5;color:#1a1e28;min-height:100vh}
+.header{background:#1a4a7a;color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+.header-title{font-size:14px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.header-title span{color:#d04a1a;display:block;font-size:11px}
+.main{max-width:900px;margin:0 auto;padding:20px}
+.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px}
+.card h2{font-size:13px;font-weight:700;color:#1a4a7a;margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:8px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px}
+.filter-group{display:flex;align-items:center;gap:6px}
+.filter-label{font-size:11px;font-weight:700;color:#7a8090;text-transform:uppercase}
+select,input{border:1px solid #d0d4da;border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;color:#1a1e28;background:#fff}
+select:focus,input:focus{outline:none;border-color:#2563a8}
+.btn{border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer}
+.btn-blue{background:#1a4a7a;color:#fff}.btn-blue:hover{background:#2563a8}
+.btn-green{background:#1a7a4a;color:#fff}.btn-green:hover{background:#156038}
+.btn-gray{background:#e0e4ea;color:#1a1e28}.btn-gray:hover{background:#cdd1d9}
+
+/* TABELLA ORE */
+.ore-table{width:100%;border-collapse:collapse}
+.ore-table th{background:#1a4a7a;color:#fff;padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+.ore-table td{padding:8px 12px;border-bottom:1px solid #f0f2f5;vertical-align:middle}
+.ore-table tr:nth-child(even) td{background:#fafbfc}
+.ore-table tr.somec-row td{background:#e8f0fa}
+.ore-table tr.stab-row td{background:#e8f5ee}
+.ore-input{width:120px;border:1px solid #d0d4da;border-radius:6px;padding:5px 8px;font-size:13px;font-family:inherit;text-align:right}
+.ore-input:focus{outline:none;border-color:#2563a8;background:#f8fbff}
+.soggetto-label{font-size:12px;font-weight:600;color:#1a1e28}
+.soggetto-sub{font-size:10px;color:#7a8090;display:block}
+.cantiere-header{background:#e8f0fa;font-weight:700;font-size:12px;color:#1a4a7a;padding:8px 12px;border-bottom:1px solid #b8cfe8}
+.totale-row td{font-weight:700;background:#f4f5f7;border-top:2px solid #d0d4da}
+.badge-saved{display:inline-block;background:#e8f5ee;color:#1a7a4a;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:8px}
+.badge-modified{display:inline-block;background:#fff8e8;color:#a06010;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700;margin-left:8px}
+.section-title{font-size:13px;font-weight:700;color:#1a4a7a;text-transform:uppercase;letter-spacing:.05em;margin:16px 0 8px;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:#d0d4da}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1e28;color:#fff;padding:9px 18px;border-radius:20px;font-size:12px;font-weight:600;opacity:0;transition:all .3s;z-index:1000}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px}
+.summary-card{background:#f4f5f7;border-radius:6px;padding:12px;border-left:3px solid #1a4a7a}
+.summary-card .num{font-size:22px;font-weight:800;color:#1a4a7a}
+.summary-card .lbl{font-size:10px;color:#7a8090;text-transform:uppercase;letter-spacing:.04em}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">SOMEC NAVALE<span>Ore Lavorate — Inserimento Trimestrale</span></div>
+</div>
+
+<div class="main">
+
+  <!-- FILTRI -->
+  <div class="card">
+    <div class="filters">
+      <div class="filter-group">
+        <span class="filter-label">Anno</span>
+        <select id="f-anno">
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Trimestre</span>
+        <select id="f-trim">
+          <option value="Q1">Q1 Gen-Mar</option>
+          <option value="Q2">Q2 Apr-Giu</option>
+          <option value="Q3">Q3 Lug-Set</option>
+          <option value="Q4">Q4 Ott-Dic</option>
+        </select>
+      </div>
+      <button class="btn btn-blue" onclick="loadOre()">📂 Carica dati</button>
+      <button class="btn btn-green" onclick="salvaOre()">💾 Salva tutto</button>
+      <button class="btn btn-gray" onclick="resetForm()">↺ Reset</button>
+    </div>
+    <div id="stato-salvataggio" style="font-size:11px;color:#7a8090"></div>
+  </div>
+
+  <!-- TABELLA ORE -->
+  <div class="card">
+    <h2>⏱ Ore lavorate per soggetto</h2>
+    <p style="font-size:11px;color:#7a8090;margin-bottom:14px">Inserisci le ore totali lavorate nel trimestre per ogni soggetto. Le ore vengono usate per calcolare l'indice SPI "Ore lavorate" (peso 13%).</p>
+    <div id="tabella-container">
+      <p style="color:#7a8090;font-size:12px;text-align:center;padding:20px">Seleziona anno e trimestre e clicca "Carica dati"</p>
+    </div>
+  </div>
+
+  <!-- RIEPILOGO -->
+  <div class="card" id="riepilogo-card" style="display:none">
+    <h2>📊 Riepilogo ore totali</h2>
+    <div class="summary-grid" id="riepilogo-grid"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+
+// ── STRUTTURA CANTIERI ────────────────────────────────────
+const STRUTTURA = [
+  {cantiere:'Stabilimento Somec', sito:'Stabilimento Somec -- sede principale', isStab:true,
+   soggetti:[{nome:'Somec – Stabilimento', key:'somec'}]},
+  {cantiere:'Genova (Fincantieri)', sito:'Genova (Fincantieri)', isStab:false,
+   soggetti:[{nome:'Somec – Genova', key:'somec'},{nome:'Giemmeci', key:'Giemmeci'},{nome:'HB Montaggi', key:'HB Montaggi'},{nome:'Macris', key:'Macris'}]},
+  {cantiere:'Marghera (Fincantieri)', sito:'Marghera (Fincantieri)', isStab:false,
+   soggetti:[{nome:'Somec – Marghera', key:'somec'},{nome:'Technik', key:'Technik'},{nome:'Solanord', key:'Solanord'}]},
+  {cantiere:'Monfalcone (Fincantieri)', sito:'Monfalcone (Fincantieri)', isStab:false,
+   soggetti:[{nome:'Somec – Monfalcone', key:'somec'},{nome:'Sotrade', key:'Sotrade'},{nome:'PLG', key:'PLG'},{nome:'TSM', key:'TSM'},{nome:'EJ-ER', key:'EJ-ER'}]},
+  {cantiere:'Turku (Meyer)', sito:'Turku (Meyer)', isStab:false,
+   soggetti:[{nome:'Somec – Turku', key:'somec'},{nome:'Sotrade', key:'Sotrade'},{nome:'SVM', key:'SVM'},{nome:'Finistratum', key:'Finistratum'},{nome:'Fabrilis', key:'Fabrilis'},{nome:'Falmot', key:'Falmot'},{nome:'TKY', key:'TKY'},{nome:'Novus', key:'Novus'}]},
+  {cantiere:"Saint-Nazaire (Chantiers de l'Atlantique)", sito:"Saint-Nazaire (Chantiers de l'Atlantique)", isStab:false,
+   soggetti:[{nome:'Somec – Saint-Nazaire', key:'somec'},{nome:'Technik', key:'Technik'},{nome:'Borhan', key:'Borhan'}]},
+  {cantiere:'Papenburg (Meyer Werft)', sito:'Papenburg (Meyer Werft)', isStab:false,
+   soggetti:[{nome:'Somec – Papenburg', key:'somec'},{nome:'Technik', key:'Technik'},{nome:'GC Nautica', key:'GC Nautica'}]},
+];
+
+let oreData = {}; // {docId: {ore: N}}
+let modified = new Set();
+
+function docId(sito, key, anno, trim) {
+  return `ORE-${anno}-${trim}-${sito.replace(/[^a-zA-Z0-9]/g,'_').substring(0,30)}-${key.replace(/[^a-zA-Z0-9]/g,'_')}`;
+}
+
+function showToast(msg, dur=3000) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+async function loadOre() {
+  const anno = document.getElementById('f-anno').value;
+  const trim = document.getElementById('f-trim').value;
+  document.getElementById('stato-salvataggio').textContent = 'Caricamento...';
+
+  try {
+    const snap = await db.collection('ore_lavorate')
+      .where('anno','==',parseInt(anno))
+      .where('trimestre','==',trim)
+      .get();
+
+    oreData = {};
+    snap.docs.forEach(d => { oreData[d.id] = d.data(); });
+    modified.clear();
+
+    buildTable(anno, trim);
+    document.getElementById('stato-salvataggio').textContent =
+      `Dati ${trim} ${anno} caricati — ${snap.size} record trovati`;
+  } catch(e) {
+    showToast('❌ Errore caricamento: '+e.message);
+  }
+}
+
+function buildTable(anno, trim) {
+  const cont = document.getElementById('tabella-container');
+  let html = `<table class="ore-table">
+    <thead><tr><th>Cantiere / Sito</th><th>Soggetto</th><th>Tipo</th><th>Ore lavorate nel trimestre</th><th>Stato</th></tr></thead>
+    <tbody>`;
+
+  STRUTTURA.forEach(c => {
+    html += `<tr><td colspan="5" class="cantiere-header">${c.isStab?'🏭':'🚢'} ${c.cantiere}</td></tr>`;
+    let totOre = 0;
+    c.soggetti.forEach(s => {
+      const id = docId(c.sito, s.key, anno, trim);
+      const ore = oreData[id]?.ore || 0;
+      totOre += ore;
+      const isSomec = s.key === 'somec';
+      const rowClass = c.isStab ? 'stab-row' : isSomec ? 'somec-row' : '';
+      html += `<tr class="${rowClass}">
+        <td></td>
+        <td><span class="soggetto-label">${s.nome}</span></td>
+        <td style="font-size:10px;color:#7a8090">${isSomec?'Somec (diretto)':'Subappaltatore'}</td>
+        <td>
+          <input type="number" class="ore-input" id="inp-${id}"
+            value="${ore||''}" min="0" step="1" placeholder="0"
+            oninput="onOreChange('${id}')">
+          <span style="font-size:11px;color:#7a8090;margin-left:6px">h</span>
+        </td>
+        <td id="stato-${id}">
+          ${oreData[id] ? '<span class="badge-saved">✅ Salvato</span>' : '<span style="font-size:10px;color:#bdc3c7">—</span>'}
+        </td>
+      </tr>`;
+    });
+    html += `<tr class="totale-row">
+      <td colspan="3" style="text-align:right;font-size:11px;color:#7a8090">TOTALE ${c.cantiere.split('(')[0].trim()}:</td>
+      <td id="tot-${c.sito.replace(/[^a-zA-Z0-9]/g,'_')}" style="font-size:13px;font-weight:800;color:#1a4a7a">${totOre.toLocaleString('it-IT')} h</td>
+      <td></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+  aggiornaRiepilogo(anno, trim);
+}
+
+function onOreChange(id) {
+  modified.add(id);
+  const el = document.getElementById('stato-'+id);
+  if (el) el.innerHTML = '<span class="badge-modified">✏️ Modificato</span>';
+}
+
+async function salvaOre() {
+  const anno = parseInt(document.getElementById('f-anno').value);
+  const trim = document.getElementById('f-trim').value;
+
+  if (modified.size === 0) { showToast('Nessuna modifica da salvare'); return; }
+
+  let ok=0, err=0;
+  for (const id of modified) {
+    const inp = document.getElementById('inp-'+id);
+    if (!inp) continue;
+    const ore = parseInt(inp.value)||0;
+
+    // Estrai sito e key dall'id
+    const parts = id.replace('ORE-'+anno+'-'+trim+'-','');
+    // Trova cantiere e soggetto dalla struttura
+    let sito='', soggetto='', isSomec=false;
+    STRUTTURA.forEach(c => {
+      c.soggetti.forEach(s => {
+        if (docId(c.sito, s.key, anno, trim) === id) {
+          sito = c.sito; soggetto = s.nome; isSomec = s.key==='somec';
+        }
+      });
+    });
+
+    try {
+      await db.collection('ore_lavorate').doc(id).set({
+        id, anno, trimestre:trim, sito, soggetto,
+        key: isSomec?'somec':soggetto,
+        ore, is_somec:isSomec,
+        timestamp: new Date().toISOString(),
+      });
+      oreData[id] = {ore, sito, soggetto};
+      const el = document.getElementById('stato-'+id);
+      if (el) el.innerHTML = '<span class="badge-saved">✅ Salvato</span>';
+      ok++;
+    } catch(e) {
+      err++;
+      showToast('❌ Errore: '+e.message);
+    }
+  }
+
+  modified.clear();
+  document.getElementById('stato-salvataggio').textContent =
+    `Salvato ${new Date().toLocaleTimeString('it-IT')} — ${ok} record aggiornati`;
+  showToast(`✅ ${ok} record salvati${err>0?' ('+err+' errori)':''}`);
+  aggiornaRiepilogo(anno, trim);
+  aggiornaTotali(anno, trim);
+}
+
+function aggiornaRiepilogo(anno, trim) {
+  const totali = {};
+  STRUTTURA.forEach(c => {
+    let tot=0;
+    c.soggetti.forEach(s => {
+      const id = docId(c.sito, s.key, anno, trim);
+      const inp = document.getElementById('inp-'+id);
+      tot += parseInt(inp?.value||0)||0;
+    });
+    totali[c.cantiere] = tot;
+  });
+
+  const grid = document.getElementById('riepilogo-grid');
+  const card = document.getElementById('riepilogo-card');
+  const totGlobal = Object.values(totali).reduce((a,b)=>a+b,0);
+
+  grid.innerHTML = Object.entries(totali).map(([k,v])=>`
+    <div class="summary-card">
+      <div class="num">${v.toLocaleString('it-IT')}</div>
+      <div class="lbl">${k.split('(')[0].trim()}</div>
+    </div>`).join('') +
+    `<div class="summary-card" style="border-left-color:#d04a1a">
+      <div class="num" style="color:#d04a1a">${totGlobal.toLocaleString('it-IT')}</div>
+      <div class="lbl">TOTALE SOMEC GROUP</div>
+    </div>`;
+  card.style.display = '';
+}
+
+function aggiornaTotali(anno, trim) {
+  STRUTTURA.forEach(c => {
+    let tot=0;
+    c.soggetti.forEach(s => {
+      const id = docId(c.sito, s.key, anno, trim);
+      const inp = document.getElementById('inp-'+id);
+      tot += parseInt(inp?.value||0)||0;
+    });
+    const el = document.getElementById('tot-'+c.sito.replace(/[^a-zA-Z0-9]/g,'_'));
+    if (el) el.textContent = tot.toLocaleString('it-IT')+' h';
+  });
+}
+
+function resetForm() {
+  document.querySelectorAll('.ore-input').forEach(inp=>{ inp.value=''; });
+  modified.clear();
+  showToast('Form resettato');
+}
+
+// Init — imposta trimestre corrente
+window.addEventListener('load', ()=>{
+  const m = new Date().getMonth()+1;
+  document.getElementById('f-trim').value = m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
+  document.getElementById('f-anno').value = new Date().getFullYear();
+});
+</script>
+</body>
+</html>
