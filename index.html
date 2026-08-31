@@ -1134,19 +1134,20 @@ function renderAC() {
   // Usa safereports_all = tutto l'anno + anno precedente, indipendentemente dal trimestre
   const srAll = DATA.safereports_all || DATA.safereports;
   const rsppAperte = srAll.filter(s=>
-    s.tipo!=='infortunio' && s.tipo!=='near_miss' &&
     s.stato!=='chiusa'
   ).sort((a,b)=>(a.data_ora||'').localeCompare(b.data_ora||''));
 
   const rsppChiuse = srAll.filter(s=>
-    s.tipo!=='infortunio' && s.tipo!=='near_miss' &&
     s.stato==='chiusa'
   ).sort((a,b)=>(b.data_chiusura||'').localeCompare(a.data_chiusura||''));
 
   const tipoRsppLabel = t => ({
     situazione_pericolosa:'⚠️ Unsafe Condition',
-    comunicazione_organizzativa:'📋 Organizzativa',
     near_miss:'🚨 Near Miss',
+    infortunio:'🏥 Infortunio',
+    lesione:'🩹 Lesione',
+    emergenza:'🆘 Emergenza',
+    comunicazione_organizzativa:'📋 Organizzativa',
   }[t]||t);
 
   // Mappa segnalante leggibile dall'email o dal campo segnalato_da
