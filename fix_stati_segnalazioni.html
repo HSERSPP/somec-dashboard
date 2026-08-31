@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Fix Stati Segnalazioni</title></head>
+<body style="font-family:'Segoe UI',sans-serif;padding:20px;background:#f0f2f5">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+  <h2 style="color:#1a4a7a;font-size:16px;margin-bottom:12px">🔧 Fix Stati Segnalazioni HSE</h2>
+  <p style="font-size:12px;color:#7a8090;margin-bottom:16px">Aggiorna 13 record in Firestore con lo stato corretto.</p>
+  <button onclick="fix()" style="background:#1a7a4a;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer">🔧 Aggiorna tutti i record</button>
+  <pre id="out" style="margin-top:16px;background:#1a1e28;color:#4ade80;padding:12px;border-radius:8px;font-size:11px;max-height:400px;overflow-y:auto">Pronto — clicca il tasto.</pre>
+</div>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+
+const FIXES = [
+  {id:'SR-B2-20260609-01',  stato:'chiusa'},
+  {id:'SR-B2-20260709-01',  stato:'chiusa'},
+  {id:'SR-B2-20260716-01',  stato:'chiusa'},
+  {id:'SR-B2-20260724-01',  stato:'chiusa'},
+  {id:'SR-RSPP-20260213-01',stato:'aperta'},
+  {id:'SR-RSPP-20260311-01',stato:'chiusa'},
+  {id:'SR-RSPP-20260323-01',stato:'aperta'},
+  {id:'SR-RSPP-20260327-01',stato:'aperta'},
+  {id:'SR-RSPP-20260327-03',stato:'chiusa'},
+  {id:'SR-RSPP-20260417-01',stato:'chiusa'},
+  {id:'SR-RSPP-20260604-01',stato:'chiusa'},
+  {id:'SR-RSPP-20260612-03',stato:'aperta'},
+  {id:'SR-RSPP-20260721-01',stato:'aperta'},
+];
+
+async function fix() {
+  const out = document.getElementById('out');
+  out.textContent = 'Aggiornamento in corso...\n';
+  let ok=0, err=0;
+  for (const f of FIXES) {
+    try {
+      await db.collection('safereport').doc(f.id).update({stato: f.stato});
+      out.textContent += `✅ ${f.id} → ${f.stato}\n`;
+      ok++;
+    } catch(e) {
+      out.textContent += `❌ ${f.id}: ${e.message}\n`;
+      err++;
+    }
+  }
+  out.textContent += `\nCompletato: ${ok} aggiornati, ${err} errori.`;
+}
+</script>
+</body>
+</html>
