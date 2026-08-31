@@ -156,22 +156,22 @@ const INDICI = [
    formula: d => !isVal(d.gg_ass)?5:d.gg_ass==0?5:d.gg_ass<3?4:d.gg_ass<=30?3:d.gg_ass<=60?2:1},
 
   {id:'nearmiss', nome:'Near Miss', peso:13, v5peso:15,
-   desc:'Logica premiante. Segnalati e gestiti con AC = ottimo.',
+   desc:'Logica premiante: segnalati e gestiti con AC = ottimo. Formula identica all Excel cella V.',
    campi:[
      {id:'nm_segnalati',label:'N. segnalati',type:'number',min:0,placeholder:'0'},
      {id:'nm_gestiti',label:'N. gestiti con AC',type:'number',min:0,placeholder:'0'},
-     {id:'nm_gravita',label:'Gravità 0-5',type:'number',min:0,max:5,placeholder:'3'},
-     {id:'ap_prec',label:'Aperto prec.? (1=sì)',type:'number',min:0,max:1,placeholder:'0'},
    ],
    formula: d => {
-     const {nm_segnalati:ns,nm_gestiti:ng,nm_gravita:grav,ap_prec:ap} = d;
-     if(!isVal(ns)&&!isVal(ng)) return isVal(grav)?+grav:3;
-     const pen = ap==1?1:0;
-     if(!isVal(ns)||+ns==0) return (+grav||3)-pen;
-     if(!isVal(ng)||+ng==0) return Math.max(0,2-pen);
-     if(+ng>=3&&+ng>=+ns) return Math.max(0,5-pen);
-     if(+ng>=1&&+ng>=+ns) return Math.max(0,4-pen);
-     return Math.max(0,3-pen);
+     // =IF(D&&E blank): IF(C_infort>0,1,3) ELSE: IF(D blank/0,3, IF(E blank/0,2, IF(D>=3&&E>=D,5, IF(D>=1&&E>=D,4,3))))
+     const ns = d.nm_segnalati, ng = d.nm_gestiti;
+     const nsBlank = !isVal(ns)||+ns===0;
+     const ngBlank = !isVal(ng)||+ng===0;
+     if(nsBlank && ngBlank) return 3; // nessun dato = neutro
+     if(nsBlank) return 3;
+     if(ngBlank) return 2;
+     if(+ns>=3 && +ng>=+ns) return 5;
+     if(+ns>=1 && +ng>=+ns) return 4;
+     return 3;
    }},
 
   {id:'segnalazioni', nome:'Segnalazioni', peso:13, v5peso:15,
@@ -192,16 +192,20 @@ const INDICI = [
    formula: d => isVal(d.proc_score)?Math.max(0,Math.min(5,+d.proc_score)):3},
 
   {id:'dpi', nome:'DPI', peso:11, v5peso:12,
-   desc:'Tre sotto-indici (utilizzo, controllo, conservazione) — media automatica.',
+   desc:'Tre sotto-indici (utilizzo, controllo, conservazione) — media automatica. Formula identica all Excel cella Y.',
    campi:[
      {id:'dpi_ut',label:'Utilizzo 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
      {id:'dpi_ct',label:'Controllo 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
      {id:'dpi_cn',label:'Conservazione 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
    ],
    formula: d => {
-     const ut=isVal(d.dpi_ut)?+d.dpi_ut:5;
-     const ct=isVal(d.dpi_ct)?+d.dpi_ct:5;
-     const cn=isVal(d.dpi_cn)?+d.dpi_cn:5;
+     // =IF(I&&J&&K TUTTI blank, 5, (I_or5+J_or5+K_or5)/3)
+     // Excel: se TUTTI blank->5; per singolo blank usa 5 nel calcolo media
+     const utB=!isVal(d.dpi_ut), ctB=!isVal(d.dpi_ct), cnB=!isVal(d.dpi_cn);
+     if(utB && ctB && cnB) return 5; // tutti blank = 5
+     const ut=utB?5:+d.dpi_ut;
+     const ct=ctB?5:+d.dpi_ct;
+     const cn=cnB?5:+d.dpi_cn;
      return parseFloat(((ut+ct+cn)/3).toFixed(2));
    }},
 
@@ -247,15 +251,17 @@ const INDICI = [
    }},
 
   {id:'ac_chiusura', nome:'Chiusura AC', peso:8, v5peso:8,
-   desc:'% AC chiuse sul totale aperte. Nessuna AC aperta = score massimo.',
+   desc:'% AC chiuse sul totale aperte. Formula identica all Excel cella AC (Q=tot, P=chiuse).',
    campi:[
-     {id:'ac_chiuse',label:'AC chiuse',type:'number',min:0,placeholder:'0'},
-     {id:'ac_totali',label:'AC totali',type:'number',min:0,placeholder:'0'},
+     {id:'ac_chiuse',label:'AC chiuse (P)',type:'number',min:0,placeholder:'0'},
+     {id:'ac_totali',label:'AC totali (Q)',type:'number',min:0,placeholder:'0'},
    ],
    formula: d => {
-     const ch=+d.ac_chiuse||0, tot=+d.ac_totali||0;
-     if(tot==0) return 5;
-     const pct=ch/tot;
+     // =IF(Q blank/0, 3, IF(P blank, 0, IF(P/Q>=1,5,>=0.8->4,>=0.6->3,>=0.4->2,>=0.2->1,else->0)))
+     const tot=+d.ac_totali||0, ch=d.ac_chiuse;
+     if(!isVal(d.ac_totali)||tot===0) return 3; // neutro se nessuna AC aperta nel trimestre
+     if(!isVal(ch)) return 0; // totali presenti ma chiuse blank = 0
+     const pct=+ch/tot;
      return pct>=1?5:pct>=0.8?4:pct>=0.6?3:pct>=0.4?2:pct>=0.2?1:0;
    }},
 
