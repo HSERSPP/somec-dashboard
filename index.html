@@ -129,6 +129,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
 .btn-chiudi{border:none;border-radius:var(--radius);background:var(--green);color:#fff;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer}
 .btn-chiudi:hover{background:#156038}
 .btn-chiudi:disabled{background:#bdc3c7;cursor:not-allowed}
+.btn-view{border:none;border-radius:var(--radius);background:#e8f0fa;color:var(--blue);padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px}
+.btn-view:hover{background:#c8d8f0}
+.btn-edit{border:none;border-radius:var(--radius);background:#fff8e8;color:var(--amber);padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px}
+.btn-edit:hover{background:#ffefc0}
+.btn-del{border:none;border-radius:var(--radius);background:#fdecea;color:var(--red);padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}
+.btn-del:hover{background:#f9ccc9}
+.btn-group{display:flex;gap:2px;flex-wrap:nowrap}
+/* Modal largo per visualizza/modifica */
+.modal-lg{max-width:640px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:12px}
+.detail-item label{font-size:10px;font-weight:700;color:var(--gray-mid);text-transform:uppercase;display:block;margin-bottom:2px}
+.detail-item span{font-size:12px;color:var(--text)}
+.detail-item.full{grid-column:1/-1}
+.edit-field{width:100%;border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;color:var(--text)}
+.edit-field:focus{outline:none;border-color:var(--blue-mid)}
 
 /* CHART */
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
@@ -278,6 +293,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
   </div>
 </div>
 
+<!-- MODAL VISUALIZZA RECORD -->
+<div class="modal-overlay" id="modal-view">
+  <div class="modal modal-lg">
+    <div class="modal-header" id="modal-view-header">👁 Dettaglio<button class="modal-close" onclick="document.getElementById('modal-view').classList.remove('show')">×</button></div>
+    <div class="modal-body" id="modal-view-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn-action btn-blue" onclick="document.getElementById('modal-view').classList.remove('show')">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MODIFICA RECORD -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal modal-lg">
+    <div class="modal-header" id="modal-edit-header">✏️ Modifica<button class="modal-close" onclick="document.getElementById('modal-edit').classList.remove('show')">×</button></div>
+    <div class="modal-body" id="modal-edit-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn-action btn-blue" onclick="document.getElementById('modal-edit').classList.remove('show')">Annulla</button>
+      <button class="btn-action btn-green" onclick="confirmEdit()">💾 Salva modifiche</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL CHIUSURA SEGNALAZIONE HSE -->
 <div class="modal-overlay" id="modal-segn">
   <div class="modal">
@@ -422,10 +460,14 @@ async function loadData() {
     let qSPrev = db.collection('safereport').where('anno','==',anno-1);
     if (sito!=='ALL') qSPrev = qSPrev.where('sito','==',sito);
 
-    const [ra,rs,rp,rSAll,rSPrev] = await Promise.all([qA.get(),qS.get(),qP.get(),qSAll.get(),qSPrev.get()]);
+    const [ra,rs,rp,rSAll,rSPrev,rSpiSto] = await Promise.all([
+      qA.get(),qS.get(),qP.get(),qSAll.get(),qSPrev.get(),
+      db.collection('spi_storico').where('anno','==',anno).get()
+    ]);
     DATA.audits      = ra.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.safereports = rs.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.preposti    = rp.docs.map(d=>({...d.data(),_id:d.id}));
+    DATA.spi_storico = rSpiSto.docs.map(d=>d.data());
     // Array completo per tab AC (tutto l'anno + anno precedente)
     const allIds = new Set();
     DATA.safereports_all = [...rSAll.docs,...rSPrev.docs]
@@ -709,11 +751,11 @@ const CANTIERI_CONFIG = [
   {nome:'Genova',     sito:'Genova (Fincantieri)',
    fornitori:['Giemmeci','HB Montaggi','Macris']},
   {nome:'Marghera',   sito:'Marghera (Fincantieri)',
-   fornitori:['Technik','Solanord','Artigiano del Metallo']},
+   fornitori:['Technik','Solanord']},
   {nome:'Monfalcone', sito:'Monfalcone (Fincantieri)',
-   fornitori:['Sotrade','PLG','TSM']},
+   fornitori:['Sotrade','PLG','TSM','EJ-ER']},
   {nome:'Turku',      sito:'Turku (Meyer)',
-   fornitori:['Sotrade','Finistratum','SVM','Fabrilis','Falmot','TKY','Novus']},
+   fornitori:['Sotrade','SVM','Finistratum','Fabrilis','Falmot','TKY','Novus']},
   {nome:'Saint-Nazaire',sito:"Saint-Nazaire (Chantiers de l'Atlantique)",
    fornitori:['Technik','Borhan']},
   {nome:'Papenburg',  sito:'Papenburg (Meyer Werft)',
@@ -807,8 +849,29 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
       srTot = [...srTot, ...d.safereports.filter(s=>s.sito===sito)];
       prTot = [...prTot, ...d.preposti.filter(p=>p.sito===sito)];
     });
-    if (!auditsTot.length && !srTot.length) return null;
-    return calcVoto(calcSPI(auditsTot, srTot, prTot));
+
+    // Se ho audit diretti, calcolo da quelli
+    if (auditsTot.length) {
+      return calcVoto(calcSPI(auditsTot, srTot, prTot));
+    }
+
+    // Fallback: leggo voto da spi_storico (dati importati dall'Excel)
+    if (DATA.spi_storico && DATA.spi_storico.length) {
+      const anno = parseInt(document.getElementById('f-anno').value);
+      const trim = document.getElementById('f-trim').value;
+      // Cerca per sito e impresa nel periodo
+      const match = DATA.spi_storico.filter(r => {
+        const sitoMatch = (r.sito||'').toLowerCase().includes(sito.split('(')[0].trim().toLowerCase());
+        const annoMatch = r.anno === anno;
+        const trimMatch = trim === 'ANNO' || r.trimestre === trim;
+        const impresaMatch = impresa
+          ? (r.impresa||'').toLowerCase().includes(impresa.toLowerCase())
+          : (r.impresa||'').toLowerCase().includes('somec');
+        return sitoMatch && annoMatch && trimMatch && impresaMatch;
+      });
+      if (match.length && match[0].voto !== null) return match[0].voto;
+    }
+    return null;
   };
 
   let html = `<div class="section-title" style="margin-top:24px">🎯 Speedometer SPI — Per Cantiere e Soggetto</div>`;
@@ -895,7 +958,7 @@ function renderAC() {
   // ── SEZIONE 1: NC APERTE ──
   html += `<div class="section-title">⚠️ NC Aperte — Azioni Correttive (${ncAperte.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Sito</th><th>Impresa</th><th>Non Conformita</th><th>Livello</th><th>Scadenza</th><th>Azione</th></tr></thead>
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Non Conformita</th><th>Livello</th><th>Scadenza</th><th>Azioni</th></tr></thead>
     <tbody>`;
   if (!ncAperte.length) {
     html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">✅ Nessuna NC aperta in questo periodo.</td></tr>';
@@ -909,7 +972,14 @@ function renderAC() {
         <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
         <td>${nc.livello?lvLabel(nc.livello):'—'}</td>
         <td style="${scadStyle}">${scad}</td>
-        <td><button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'")}')">Chiudi AC</button></td>
+        <td>
+          <div class="btn-group">
+            <button class="btn-view" onclick="viewRecord('nc','${nc.voce_id}')">👁</button>
+            <button class="btn-edit" onclick="editRecord('nc','${nc.voce_id}')">✏️</button>
+            <button class="btn-del" onclick="deleteRecord('nc','${nc.voce_id}')">🗑</button>
+            <button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'")}')">Chiudi AC</button>
+          </div>
+        </td>
       </tr>`;
     });
   }
@@ -918,7 +988,7 @@ function renderAC() {
   // ── SEZIONE 2: OBS IN MONITORAGGIO ──
   html += `<div class="section-title" style="margin-top:20px">👁 OBS in Monitoraggio (${obsAll.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Sito</th><th>Impresa</th><th>Osservazione</th><th>Priorita</th><th>Data audit</th><th>Azione</th></tr></thead>
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Osservazione</th><th>Priorita</th><th>Data audit</th><th>Azioni</th></tr></thead>
     <tbody>`;
   if (!obsAll.length) {
     html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna OBS in monitoraggio.</td></tr>';
@@ -930,9 +1000,14 @@ function renderAC() {
         <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${obs.sezione||''}</span></td>
         <td>${obs.priorita?obsLvLabel(obs.priorita):'—'}</td>
         <td>${obs.data_audit||'—'}</td>
-        <td style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','risolto')">✅ Risolto</button>
-          <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','elevato')">⬆ Eleva a NC</button>
+        <td>
+          <div class="btn-group">
+            <button class="btn-view" onclick="viewRecord('obs','${obs.voce_id}')">👁</button>
+            <button class="btn-edit" onclick="editRecord('obs','${obs.voce_id}')">✏️</button>
+            <button class="btn-del" onclick="deleteRecord('obs','${obs.voce_id}')">🗑</button>
+            <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','risolto')">✅</button>
+            <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','elevato')">⬆</button>
+          </div>
         </td>
       </tr>`;
     });
@@ -942,7 +1017,7 @@ function renderAC() {
   // ── SEZIONE 3: STORICO NC CHIUSE ──
   html += `<div class="section-title" style="margin-top:20px">✅ Storico NC Chiuse (${ncChiuse.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Sito</th><th>Impresa</th><th>Non Conformita</th><th>Livello</th><th>Data chiusura</th><th>Nota chiusura</th></tr></thead>
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Non Conformita</th><th>Livello</th><th>Data chiusura</th><th>Nota chiusura</th><th>Azioni</th></tr></thead>
     <tbody>`;
   if (!ncChiuse.length) {
     html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna NC chiusa in questo periodo.</td></tr>';
@@ -955,6 +1030,11 @@ function renderAC() {
         <td>${nc.livello?lvLabel(nc.livello):'—'}</td>
         <td style="color:var(--green);font-weight:700">${nc.data_chiusura||'—'}</td>
         <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${nc.nota_chiusura||'—'}</td>
+        <td><div class="btn-group">
+          <button class="btn-view" onclick="viewRecord('nc_chiusa','${nc.voce_id}')">👁</button>
+          <button class="btn-edit" onclick="editRecord('nc_chiusa','${nc.voce_id}')">✏️</button>
+          <button class="btn-del" onclick="deleteRecord('nc_chiusa','${nc.voce_id}')">🗑</button>
+        </div></td>
       </tr>`;
     });
   }
@@ -968,7 +1048,7 @@ function renderAC() {
 
   html += `<div class="section-title" style="margin-top:20px">📋 Storico OBS Chiuse/Elevate (${obsStorico.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Sito</th><th>Impresa</th><th>Osservazione</th><th>Priorita</th><th>Esito</th><th>Data</th><th>Motivazione</th></tr></thead>
+    <thead><tr><th>Sito</th><th>Impresa</th><th>Osservazione</th><th>Priorita</th><th>Esito</th><th>Data</th><th>Motivazione</th><th>Azioni</th></tr></thead>
     <tbody>`;
   if (!obsStorico.length) {
     html += '<tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna OBS chiusa o elevata in questo periodo.</td></tr>';
@@ -985,6 +1065,11 @@ function renderAC() {
         <td>${esitoLabel}</td>
         <td>${obs.data_aggiornamento||'—'}</td>
         <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${obs.nota_gestione||'—'}</td>
+        <td><div class="btn-group">
+          <button class="btn-view" onclick="viewRecord('obs_storico','${obs.voce_id}')">👁</button>
+          <button class="btn-edit" onclick="editRecord('obs_storico','${obs.voce_id}')">✏️</button>
+          <button class="btn-del" onclick="deleteRecord('obs_storico','${obs.voce_id}')">🗑</button>
+        </div></td>
       </tr>`;
     });
   }
@@ -1028,7 +1113,7 @@ function renderAC() {
 
   html += `<div class="section-title" style="margin-top:20px">📧 Segnalazioni HSE Aperte (${rsppAperte.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Segnalato da</th><th>Destinatario</th><th>Scadenza</th><th>Azione</th></tr></thead>
+    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Segnalato da</th><th>Destinatario</th><th>Scadenza</th><th>Azioni</th></tr></thead>
     <tbody>`;
   if (!rsppAperte.length) {
     html += '<tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna segnalazione HSE aperta.</td></tr>';
@@ -1036,15 +1121,21 @@ function renderAC() {
     rsppAperte.forEach(s => {
       const scad = s.scadenza || '—';
       const scadStyle = scad!=='—' && scad < oggi ? 'color:var(--red);font-weight:700' : '';
+      const sid = s._id||s.id;
       const descSafe = (s.descrizione||'').substring(0,60).replace(/'/g,"\\'");
       html += `<tr>
         <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
         <td>${tipoRsppLabel(s.tipo)}</td>
-        <td style="font-size:11px">${(s.descrizione||'—').substring(0,100)}...</td>
+        <td style="font-size:11px">${(s.descrizione||'—').substring(0,80)}...</td>
         <td style="font-size:11px;color:var(--blue)">${getSegnalante(s)}</td>
         <td style="font-size:11px">${s.destinatario||'—'}</td>
         <td style="${scadStyle}">${scad}</td>
-        <td><button class="btn-chiudi" onclick="apriModalSegn('${s._id||s.id}','${descSafe}')">Chiudi</button></td>
+        <td><div class="btn-group">
+          <button class="btn-view" onclick="viewRecord('segn_aperta','${sid}')">👁</button>
+          <button class="btn-edit" onclick="editRecord('segn_aperta','${sid}')">✏️</button>
+          <button class="btn-del" onclick="deleteRecord('segn_aperta','${sid}')">🗑</button>
+          <button class="btn-chiudi" onclick="apriModalSegn('${sid}','${descSafe}')">Chiudi</button>
+        </div></td>
       </tr>`;
     });
   }
@@ -1052,19 +1143,25 @@ function renderAC() {
 
   html += `<div class="section-title" style="margin-top:20px">✅ Segnalazioni HSE Chiuse (${rsppChiuse.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Segnalato da</th><th>Data chiusura</th><th>Come risolta</th></tr></thead>
+    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Segnalato da</th><th>Data chiusura</th><th>Come risolta</th><th>Azioni</th></tr></thead>
     <tbody>`;
   if (!rsppChiuse.length) {
     html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna segnalazione chiusa.</td></tr>';
   } else {
     rsppChiuse.forEach(s => {
+      const sid = s._id||s.id;
       html += `<tr>
         <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
         <td>${tipoRsppLabel(s.tipo)}</td>
-        <td style="font-size:11px">${(s.descrizione||'—').substring(0,100)}...</td>
+        <td style="font-size:11px">${(s.descrizione||'—').substring(0,80)}...</td>
         <td style="font-size:11px;color:var(--blue)">${getSegnalante(s)}</td>
         <td style="color:var(--green);font-weight:700;white-space:nowrap">${s.data_chiusura||'—'}</td>
-        <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${(s.nota_chiusura||'—').substring(0,100)}</td>
+        <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${(s.nota_chiusura||'—').substring(0,80)}</td>
+        <td><div class="btn-group">
+          <button class="btn-view" onclick="viewRecord('segn_chiusa','${sid}')">👁</button>
+          <button class="btn-edit" onclick="editRecord('segn_chiusa','${sid}')">✏️</button>
+          <button class="btn-del" onclick="deleteRecord('segn_chiusa','${sid}')">🗑</button>
+        </div></td>
       </tr>`;
     });
   }
@@ -1073,7 +1170,226 @@ function renderAC() {
   cont.innerHTML = html;
 }
 
-let pendingSegn = null;
+// ── VISUALIZZA / MODIFICA / ELIMINA ───────────────────────
+let currentEditRecord = null; // {collection, id, tipo, data}
+
+function viewRecord(tipo, id) {
+  const rec = findRecord(tipo, id);
+  if (!rec) return;
+  const h = buildViewHTML(tipo, rec);
+  document.getElementById('modal-view-header').innerHTML =
+    `👁 Dettaglio — ${tipoLabel(tipo, rec)}<button class="modal-close" onclick="document.getElementById('modal-view').classList.remove('show')">×</button>`;
+  document.getElementById('modal-view-body').innerHTML = h;
+  document.getElementById('modal-view').classList.add('show');
+}
+
+function editRecord(tipo, id) {
+  const rec = findRecord(tipo, id);
+  if (!rec) return;
+  currentEditRecord = {tipo, id, data: rec};
+  document.getElementById('modal-edit-header').innerHTML =
+    `✏️ Modifica — ${tipoLabel(tipo, rec)}<button class="modal-close" onclick="document.getElementById('modal-edit').classList.remove('show')">×</button>`;
+  document.getElementById('modal-edit-body').innerHTML = buildEditHTML(tipo, rec);
+  document.getElementById('modal-edit').classList.add('show');
+}
+
+async function deleteRecord(tipo, id) {
+  const rec = findRecord(tipo, id);
+  const label = rec ? (rec.voce_testo||rec.descrizione||id||'').substring(0,60) : id;
+  if (!confirm(`Eliminare definitivamente questo record?\n\n"${label}"\n\nQuesta azione non è reversibile.`)) return;
+  try {
+    const coll = collectionForTipo(tipo, id);
+    if (tipo==='nc' || tipo==='obs' || tipo==='nc_chiusa' || tipo==='obs_storico') {
+      // NC e OBS stanno dentro audit_hse — rimuovi dall'array
+      const auditId = rec.auditId;
+      const snap = await db.collection('audit_hse').doc(auditId).get();
+      if (!snap.exists) { showToast('❌ Audit non trovato'); return; }
+      const d = snap.data();
+      const field = (tipo==='nc'||tipo==='nc_chiusa') ? 'nc_list' : 'obs_list';
+      const arr = (d[field]||[]).filter(x=>x.voce_id!==rec.voce_id);
+      const ac_aperte = arr.filter(x=>x.stato_ac!=='chiusa').length;
+      const ac_chiuse = arr.filter(x=>x.stato_ac==='chiusa').length;
+      await db.collection('audit_hse').doc(auditId).update({[field]:arr, ac_aperte, ac_chiuse});
+      // Aggiorna locale
+      const a = DATA.audits.find(x=>x._id===auditId);
+      if (a) { a[field]=arr; a.ac_aperte=ac_aperte; a.ac_chiuse=ac_chiuse; }
+    } else {
+      await db.collection('safereport').doc(id).delete();
+      DATA.safereports_all = (DATA.safereports_all||[]).filter(x=>(x._id||x.id)!==id);
+      DATA.safereports = DATA.safereports.filter(x=>(x._id||x.id)!==id);
+    }
+    showToast('✅ Record eliminato');
+    renderAC();
+  } catch(e) { showToast('❌ Errore: '+e.message); }
+}
+
+async function confirmEdit() {
+  if (!currentEditRecord) return;
+  const {tipo, id, data} = currentEditRecord;
+  try {
+    const updates = readEditForm(tipo);
+    if (!updates) return;
+    if (tipo==='nc'||tipo==='obs'||tipo==='nc_chiusa'||tipo==='obs_storico') {
+      const auditId = data.auditId;
+      const snap = await db.collection('audit_hse').doc(auditId).get();
+      const d = snap.data();
+      const field = (tipo==='nc'||tipo==='nc_chiusa') ? 'nc_list' : 'obs_list';
+      const arr = [...(d[field]||[])];
+      const idx = arr.findIndex(x=>x.voce_id===data.voce_id);
+      if (idx>=0) arr[idx] = {...arr[idx], ...updates};
+      await db.collection('audit_hse').doc(auditId).update({[field]:arr});
+      const a = DATA.audits.find(x=>x._id===auditId);
+      if (a) a[field]=arr;
+    } else {
+      await db.collection('safereport').doc(id).update(updates);
+      const sr = DATA.safereports_all||DATA.safereports;
+      const idx = sr.findIndex(x=>(x._id||x.id)===id);
+      if (idx>=0) Object.assign(sr[idx], updates);
+    }
+    showToast('✅ Modifiche salvate');
+    document.getElementById('modal-edit').classList.remove('show');
+    currentEditRecord = null;
+    renderAC();
+  } catch(e) { showToast('❌ Errore: '+e.message); }
+}
+
+// ── HELPERS ───────────────────────────────────────────────
+function findRecord(tipo, id) {
+  if (tipo==='nc'||tipo==='nc_chiusa') {
+    for (const a of DATA.audits) {
+      const nc = (a.nc_list||[]).find(x=>x.voce_id===id);
+      if (nc) return {...nc, auditId:a._id, sito:a.sito, impresa:a.impresa, data_audit:a.data_audit};
+    }
+  }
+  if (tipo==='obs'||tipo==='obs_storico') {
+    for (const a of DATA.audits) {
+      const obs = (a.obs_list||[]).find(x=>x.voce_id===id);
+      if (obs) return {...obs, auditId:a._id, sito:a.sito, impresa:a.impresa, data_audit:a.data_audit};
+    }
+  }
+  if (tipo==='segn_aperta'||tipo==='segn_chiusa') {
+    const sr = DATA.safereports_all||DATA.safereports;
+    return sr.find(x=>(x._id||x.id)===id)||null;
+  }
+  return null;
+}
+
+function collectionForTipo(tipo) {
+  if (tipo==='nc'||tipo==='obs'||tipo==='nc_chiusa'||tipo==='obs_storico') return 'audit_hse';
+  return 'safereport';
+}
+
+function tipoLabel(tipo, rec) {
+  if (tipo==='nc') return 'NC Aperta';
+  if (tipo==='nc_chiusa') return 'NC Chiusa';
+  if (tipo==='obs') return 'OBS in Monitoraggio';
+  if (tipo==='obs_storico') return 'OBS Storico';
+  if (tipo==='segn_aperta') return 'Segnalazione HSE Aperta';
+  if (tipo==='segn_chiusa') return 'Segnalazione HSE Chiusa';
+  return tipo;
+}
+
+function fld(label, val) {
+  return `<div class="detail-item"><label>${label}</label><span>${val||'—'}</span></div>`;
+}
+function fldFull(label, val) {
+  return `<div class="detail-item full"><label>${label}</label><span style="line-height:1.5">${val||'—'}</span></div>`;
+}
+
+function buildViewHTML(tipo, r) {
+  if (tipo==='nc'||tipo==='nc_chiusa') {
+    const lvMap={1:'Lv.1 Minore',2:'Lv.2 Medio',3:'Lv.3 Elevato'};
+    return `<div class="detail-grid">
+      ${fld('Sito',r.sito)} ${fld('Impresa',r.impresa)}
+      ${fld('Data audit',r.data_audit)} ${fld('Sezione',r.sezione)}
+      ${fld('Livello NC',lvMap[r.livello]||'—')} ${fld('Scadenza AC',r.scadenza||'—')}
+      ${fld('Stato AC',r.stato_ac||'aperta')} ${fld('Data chiusura',r.data_chiusura||'—')}
+      ${fldFull('Testo NC',r.voce_testo)}
+      ${fldFull('Nota preposto',r.nota)}
+      ${fldFull('Nota chiusura',r.nota_chiusura)}
+    </div>`;
+  }
+  if (tipo==='obs'||tipo==='obs_storico') {
+    const prMap={1:'Bassa',2:'Media',3:'Alta'};
+    return `<div class="detail-grid">
+      ${fld('Sito',r.sito)} ${fld('Impresa',r.impresa)}
+      ${fld('Data audit',r.data_audit)} ${fld('Sezione',r.sezione)}
+      ${fld('Priorita',prMap[r.priorita]||'—')} ${fld('Stato',r.stato_obs||'in monitoraggio')}
+      ${fld('Data aggiornamento',r.data_aggiornamento||'—')}
+      ${fldFull('Testo OBS',r.voce_testo||r.nota)}
+      ${fldFull('Motivazione',r.nota_gestione)}
+    </div>`;
+  }
+  // Segnalazione
+  return `<div class="detail-grid">
+    ${fld('Protocollo',r._id||r.id)} ${fld('Data',r.data_ora?.substring(0,10))}
+    ${fld('Tipo',r.tipo)} ${fld('Sito',r.sito)}
+    ${fld('Area',r.area)} ${fld('Stato',r.stato)}
+    ${fld('Segnalato da',r.segnalato_da)} ${fld('Destinatario',r.destinatario)}
+    ${fld('Scadenza',r.scadenza||'—')} ${fld('Data chiusura',r.data_chiusura||'—')}
+    ${fldFull('Descrizione',r.descrizione)}
+    ${fldFull('Come risolta',r.nota_chiusura)}
+  </div>`;
+}
+
+function ef(label, id, val, type='text') {
+  return `<div class="detail-item full"><label>${label}</label><input class="edit-field" id="ef-${id}" type="${type}" value="${(val||'').toString().replace(/"/g,'&quot;')}"></div>`;
+}
+function et(label, id, val) {
+  return `<div class="detail-item full"><label>${label}</label><textarea class="edit-field" id="ef-${id}" rows="3">${val||''}</textarea></div>`;
+}
+function es(label, id, val, opts) {
+  const optHtml = opts.map(o=>`<option value="${o.v}" ${val===o.v?'selected':''}>${o.l}</option>`).join('');
+  return `<div class="detail-item"><label>${label}</label><select class="edit-field" id="ef-${id}">${optHtml}</select></div>`;
+}
+
+function buildEditHTML(tipo, r) {
+  if (tipo==='nc'||tipo==='nc_chiusa') {
+    return `<div class="detail-grid">
+      ${es('Livello NC','livello',r.livello?.toString(),[{v:'1',l:'Lv.1 Minore'},{v:'2',l:'Lv.2 Medio'},{v:'3',l:'Lv.3 Elevato'}])}
+      ${ef('Scadenza AC','scadenza',r.scadenza,'date')}
+      ${es('Stato AC','stato_ac',r.stato_ac||'aperta',[{v:'aperta',l:'Aperta'},{v:'chiusa',l:'Chiusa'}])}
+      ${ef('Data chiusura','data_chiusura',r.data_chiusura,'date')}
+      ${et('Nota preposto','nota',r.nota)}
+      ${et('Nota chiusura','nota_chiusura',r.nota_chiusura)}
+    </div>`;
+  }
+  if (tipo==='obs'||tipo==='obs_storico') {
+    return `<div class="detail-grid">
+      ${es('Priorita','priorita',r.priorita?.toString(),[{v:'1',l:'Bassa'},{v:'2',l:'Media'},{v:'3',l:'Alta'}])}
+      ${es('Stato OBS','stato_obs',r.stato_obs||'in_monitoraggio',[{v:'in_monitoraggio',l:'In monitoraggio'},{v:'risolto',l:'Risolto'},{v:'elevato',l:'Elevato a NC'}])}
+      ${ef('Data aggiornamento','data_aggiornamento',r.data_aggiornamento,'date')}
+      ${et('Motivazione','nota_gestione',r.nota_gestione)}
+    </div>`;
+  }
+  // Segnalazione
+  return `<div class="detail-grid">
+    ${es('Stato','stato',r.stato,[{v:'aperta',l:'Aperta'},{v:'chiusa',l:'Chiusa'}])}
+    ${ef('Scadenza','scadenza',r.scadenza,'date')}
+    ${ef('Data chiusura','data_chiusura',r.data_chiusura,'date')}
+    ${ef('Destinatario','destinatario',r.destinatario)}
+    ${et('Descrizione','descrizione',r.descrizione)}
+    ${et('Come risolta','nota_chiusura',r.nota_chiusura)}
+  </div>`;
+}
+
+function readEditForm(tipo) {
+  const g = id => document.getElementById('ef-'+id)?.value||'';
+  if (tipo==='nc'||tipo==='nc_chiusa') {
+    return {livello:parseInt(g('livello')), scadenza:g('scadenza')||null,
+      stato_ac:g('stato_ac'), data_chiusura:g('data_chiusura')||null,
+      nota:g('nota'), nota_chiusura:g('nota_chiusura')};
+  }
+  if (tipo==='obs'||tipo==='obs_storico') {
+    return {priorita:parseInt(g('priorita')), stato_obs:g('stato_obs'),
+      data_aggiornamento:g('data_aggiornamento')||null, nota_gestione:g('nota_gestione')};
+  }
+  return {stato:g('stato'), scadenza:g('scadenza')||null,
+    data_chiusura:g('data_chiusura')||null, destinatario:g('destinatario'),
+    descrizione:g('descrizione'), nota_chiusura:g('nota_chiusura')};
+}
+
+
 
 function apriModalSegn(id, testo) {
   pendingSegn = id;
