@@ -512,8 +512,17 @@ function calcSPI(a,sr,pr) {
   const ggAssenza = infortuni.reduce((s,x)=>s+(x.giorni_prognosi||0),0);
   scores.infortuni = ggAssenza===0?5:ggAssenza<=5?4:ggAssenza<=15?3:ggAssenza<=30?2:ggAssenza<=60?1:0;
 
+  // NEAR MISS — formula Excel cella V
+  // Dati da safereport: conta near miss segnalati e quanti hanno AC (stati chiusi)
   const nm = sr.filter(s=>s.tipo==='near_miss');
-  scores.nearmiss = nm.length===0?5:nm.length===1?4:nm.length<=3?3:nm.length<=5?2:1;
+  const nmSegnalati = nm.length;
+  const nmGestiti = nm.filter(s=>s.stato==='chiusa').length;
+  if(nmSegnalati===0 && nmGestiti===0) { scores.nearmiss = 3; } // neutro
+  else if(nmSegnalati===0) { scores.nearmiss = 3; }
+  else if(nmGestiti===0) { scores.nearmiss = 2; }
+  else if(nmSegnalati>=3 && nmGestiti>=nmSegnalati) { scores.nearmiss = 5; }
+  else if(nmSegnalati>=1 && nmGestiti>=nmSegnalati) { scores.nearmiss = 4; }
+  else { scores.nearmiss = 3; }
 
   const segn = sr.filter(s=>s.tipo==='situazione_pericolosa'||s.tipo==='osservazione');
   const recidive = sr.filter(s=>s.stato==='aperta'&&s.tipo==='near_miss').length;
@@ -523,20 +532,21 @@ function calcSPI(a,sr,pr) {
   if(!interviste.length){scores.procedure=null;}
   else{const tot=interviste.length;const ok=interviste.filter(i=>!(i.risposte_no||[]).includes('d01')&&!(i.risposte_no||[]).includes('d08')).length;scores.procedure=parseFloat(((ok/tot)*5).toFixed(1));}
 
+  // DPI — formula Excel cella Y: se TUTTI blank→5, altrimenti media con 5 come fallback per singolo blank
+  // score_dpi già calcolato nell'audit app su scala 0-5
   scores.dpi = a.length===0?null:parseFloat((a.reduce((s,x)=>s+(x.score_dpi||0),0)/a.length).toFixed(1));
 
   const nI = a.length;
   scores.ispezioni = nI>=8?5:nI>=6?4:nI>=4?3:nI>=2?2:nI>=1?1:0;
 
   // Ore lavorate — formula esatta dall'Excel cella AA
-  // IF(M="",2, IF(M>60000,5, IF(M>50000,4, IF(M>40000,3, IF(M>30000,2.5, IF(M>20000,2, IF(M>10000,1,0.5)))))))
   const trim = document.getElementById('f-trim')?.value || 'ANNO';
   const oreFiltrate = (DATA.ore_lavorate||[]).filter(o => {
     const trimMatch = trim==='ANNO' || o.trimestre===trim;
     return trimMatch && o.ore > 0;
   });
   const totOre = oreFiltrate.reduce((s,o)=>s+(o.ore||0),0);
-  if (!totOre) { scores.ore = 2; } // neutro se non inserite
+  if (!totOre) { scores.ore = 2; }
   else if (totOre>60000) scores.ore = 5;
   else if (totOre>50000) scores.ore = 4;
   else if (totOre>40000) scores.ore = 3;
@@ -548,9 +558,14 @@ function calcSPI(a,sr,pr) {
   if(a.length===0){scores.unsafe=null;}
   else{const tot=a.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0);const ratio=tot/a.length;scores.unsafe=ratio===0?5:ratio<=1?4:ratio<=2?3:ratio<=3?2:ratio<=5?1:0;}
 
+  // CHIUSURA AC — formula Excel cella AC: totali=0→3 (neutro), chiuse blank→0
   const acAp=a.reduce((s,x)=>s+(x.ac_aperte||0),0);
   const acCh=a.reduce((s,x)=>s+(x.ac_chiuse||0),0);
-  scores.ac_chiusura = acAp===0?5:parseFloat(((acCh/acAp)*5).toFixed(1));
+  if(acAp===0) { scores.ac_chiusura = 3; } // neutro se nessuna AC aperta
+  else {
+    const pct = acCh/acAp;
+    scores.ac_chiusura = pct>=1?5:pct>=0.8?4:pct>=0.6?3:pct>=0.4?2:pct>=0.2?1:0;
+  }
 
   const ncDoc=a.reduce((s,x)=>s+(x.conformita_doc||0),0);
   const tvoci=a.length*5;
