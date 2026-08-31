@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inserimento SPI — Somec HSE</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f2f5;color:#1a1e28;min-height:100vh}
+.header{background:#1a4a7a;color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.header-title{font-size:14px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.header-title span{color:#d04a1a;display:block;font-size:11px}
+.header-note{font-size:11px;background:rgba(255,255,255,.15);padding:4px 10px;border-radius:20px}
+.main{max-width:1100px;margin:0 auto;padding:20px}
+.card{background:#fff;border-radius:8px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px}
+.card h2{font-size:13px;font-weight:700;color:#1a4a7a;margin-bottom:14px;text-transform:uppercase;letter-spacing:.04em}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.filter-label{font-size:11px;font-weight:700;color:#7a8090;text-transform:uppercase}
+select,input[type=number],input[type=date]{border:1px solid #d0d4da;border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;color:#1a1e28;background:#fff}
+select:focus,input:focus{outline:none;border-color:#2563a8}
+.btn{border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer}
+.btn-blue{background:#1a4a7a;color:#fff}.btn-blue:hover{background:#2563a8}
+.btn-green{background:#1a7a4a;color:#fff}.btn-green:hover{background:#156038}
+.btn-gray{background:#e0e4ea;color:#1a1e28}
+
+/* Soggetto selector */
+.soggetto-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.sogg-btn{border:1.5px solid #d0d4da;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#7a8090;transition:all .15s}
+.sogg-btn.active{border-color:#1a4a7a;background:#1a4a7a;color:#fff}
+.sogg-btn.somec{border-color:#2563a8}
+.sogg-btn.somec.active{background:#2563a8;border-color:#2563a8}
+
+/* Form indici */
+.indici-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.indice-card{background:#f8f9fb;border-radius:8px;padding:14px;border:1.5px solid #e0e4ea}
+.indice-card.required{border-color:#1a4a7a}
+.indice-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.indice-name{font-size:12px;font-weight:700;color:#1a1e28}
+.indice-peso{font-size:10px;background:#e8f0fa;color:#1a4a7a;border-radius:10px;padding:2px 7px;font-weight:700}
+.indice-desc{font-size:10px;color:#7a8090;margin-bottom:10px;line-height:1.4}
+.input-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.input-label{font-size:10px;color:#7a8090;font-weight:600;min-width:80px}
+.spi-input{width:90px;border:1.5px solid #d0d4da;border-radius:6px;padding:5px 8px;font-size:13px;font-family:inherit;text-align:center}
+.spi-input:focus{outline:none;border-color:#1a4a7a}
+.score-display{font-size:16px;font-weight:800;min-width:30px;text-align:center}
+.score-bar{flex:1;height:6px;background:#f0f2f5;border-radius:3px;overflow:hidden;min-width:60px}
+.score-fill{height:6px;border-radius:3px;transition:width .3s}
+
+/* Stato */
+.badge-saved{background:#e8f5ee;color:#1a7a4a;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700}
+.badge-mod{background:#fff8e8;color:#a06010;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700}
+.voto-preview{background:#1a4a7a;color:#fff;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:16px;margin-top:14px;flex-wrap:wrap}
+.voto-num{font-size:32px;font-weight:800}
+.voto-label{font-size:13px;opacity:.8}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a1e28;color:#fff;padding:9px 18px;border-radius:20px;font-size:12px;font-weight:600;opacity:0;transition:all .3s;z-index:1000}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">SOMEC NAVALE<span>Inserimento Manuale Indici SPI</span></div>
+  <div class="header-note">🔒 Accesso RSPP — uso interno</div>
+</div>
+
+<div class="main">
+
+  <!-- FILTRI -->
+  <div class="card">
+    <div class="filters">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="filter-label">Anno</span>
+        <select id="f-anno"><option value="2026">2026</option><option value="2025">2025</option></select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="filter-label">Trimestre</span>
+        <select id="f-trim">
+          <option value="Q1">Q1 Gen-Mar</option>
+          <option value="Q2">Q2 Apr-Giu</option>
+          <option value="Q3">Q3 Lug-Set</option>
+          <option value="Q4">Q4 Ott-Dic</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="filter-label">Cantiere</span>
+        <select id="f-cantiere" onchange="aggiornaSoggetti()">
+          <option value="Stabilimento Somec -- sede principale">Stabilimento</option>
+          <option value="Genova (Fincantieri)">Genova</option>
+          <option value="Marghera (Fincantieri)">Marghera</option>
+          <option value="Monfalcone (Fincantieri)">Monfalcone</option>
+          <option value="Turku (Meyer)">Turku</option>
+          <option value="Saint-Nazaire (Chantiers de l'Atlantique)">Saint-Nazaire</option>
+          <option value="Papenburg (Meyer Werft)">Papenburg</option>
+        </select>
+      </div>
+      <button class="btn btn-blue" onclick="caricaDati()">📂 Carica</button>
+      <button class="btn btn-green" onclick="salvaDati()">💾 Salva</button>
+    </div>
+
+    <!-- Soggetti -->
+    <div style="font-size:11px;font-weight:700;color:#7a8090;text-transform:uppercase;margin-bottom:8px">Soggetto</div>
+    <div class="soggetto-grid" id="soggetti-grid"></div>
+    <div id="stato-salv" style="font-size:11px;color:#7a8090;margin-top:8px"></div>
+  </div>
+
+  <!-- INDICI -->
+  <div class="card">
+    <h2 id="form-title">Indici SPI</h2>
+    <div class="indici-grid" id="indici-grid"></div>
+    <div class="voto-preview" id="voto-preview" style="display:none">
+      <div>
+        <div class="voto-label">Voto SPI calcolato</div>
+        <div class="voto-num" id="voto-num">—</div>
+      </div>
+      <div style="flex:1">
+        <div id="voto-giudizio" style="font-size:14px;font-weight:700"></div>
+        <div id="voto-dettaglio" style="font-size:11px;opacity:.7;margin-top:4px"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+
+// ── STRUTTURA ─────────────────────────────────────────────
+const CANTIERI = {
+  'Stabilimento Somec -- sede principale': [{nome:'Somec – Stabilimento', key:'somec'}],
+  'Genova (Fincantieri)': [{nome:'Somec – Genova',key:'somec'},{nome:'Giemmeci',key:'Giemmeci'},{nome:'HB Montaggi',key:'HB Montaggi'},{nome:'Macris',key:'Macris'}],
+  'Marghera (Fincantieri)': [{nome:'Somec – Marghera',key:'somec'},{nome:'Technik',key:'Technik'},{nome:'Solanord',key:'Solanord'}],
+  'Monfalcone (Fincantieri)': [{nome:'Somec – Monfalcone',key:'somec'},{nome:'Sotrade',key:'Sotrade'},{nome:'PLG',key:'PLG'},{nome:'TSM',key:'TSM'},{nome:'EJ-ER',key:'EJ-ER'}],
+  'Turku (Meyer)': [{nome:'Somec – Turku',key:'somec'},{nome:'Sotrade',key:'Sotrade'},{nome:'SVM',key:'SVM'},{nome:'Finistratum',key:'Finistratum'},{nome:'Fabrilis',key:'Fabrilis'},{nome:'Falmot',key:'Falmot'},{nome:'TKY',key:'TKY'},{nome:'Novus',key:'Novus'}],
+  "Saint-Nazaire (Chantiers de l'Atlantique)": [{nome:'Somec – Saint-Nazaire',key:'somec'},{nome:'Technik',key:'Technik'},{nome:'Borhan',key:'Borhan'}],
+  'Papenburg (Meyer Werft)': [{nome:'Somec – Papenburg',key:'somec'},{nome:'Technik',key:'Technik'},{nome:'GC Nautica',key:'GC Nautica'}],
+};
+
+// ── 11 INDICI con formule da Excel ────────────────────────
+const INDICI = [
+  {id:'infortuni', nome:'Infortuni', peso:18, v5peso:18,
+   desc:'Giorni totali assenza per infortuni nel trimestre.',
+   campi:[{id:'gg_ass',label:'Giorni assenza',type:'number',min:0,placeholder:'0'}],
+   formula: d => !isVal(d.gg_ass)?5:d.gg_ass==0?5:d.gg_ass<3?4:d.gg_ass<=30?3:d.gg_ass<=60?2:1},
+
+  {id:'nearmiss', nome:'Near Miss', peso:13, v5peso:15,
+   desc:'Logica premiante. Segnalati e gestiti con AC = ottimo.',
+   campi:[
+     {id:'nm_segnalati',label:'N. segnalati',type:'number',min:0,placeholder:'0'},
+     {id:'nm_gestiti',label:'N. gestiti con AC',type:'number',min:0,placeholder:'0'},
+     {id:'nm_gravita',label:'Gravità 0-5',type:'number',min:0,max:5,placeholder:'3'},
+     {id:'ap_prec',label:'Aperto prec.? (1=sì)',type:'number',min:0,max:1,placeholder:'0'},
+   ],
+   formula: d => {
+     const {nm_segnalati:ns,nm_gestiti:ng,nm_gravita:grav,ap_prec:ap} = d;
+     if(!isVal(ns)&&!isVal(ng)) return isVal(grav)?+grav:3;
+     const pen = ap==1?1:0;
+     if(!isVal(ns)||+ns==0) return (+grav||3)-pen;
+     if(!isVal(ng)||+ng==0) return Math.max(0,2-pen);
+     if(+ng>=3&&+ng>=+ns) return Math.max(0,5-pen);
+     if(+ng>=1&&+ng>=+ns) return Math.max(0,4-pen);
+     return Math.max(0,3-pen);
+   }},
+
+  {id:'segnalazioni', nome:'Segnalazioni', peso:13, v5peso:15,
+   desc:'Scala 0-5 con penalità -1 per recidività (segnalazione aperta dal trimestre precedente).',
+   campi:[
+     {id:'segn_score',label:'Score 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
+     {id:'segn_aperta_prec',label:'Aperta prec.? (1=sì)',type:'number',min:0,max:1,placeholder:'0'},
+   ],
+   formula: d => {
+     const base = isVal(d.segn_score)?+d.segn_score:5;
+     const pen = d.segn_aperta_prec==1?1:0;
+     return Math.max(0, base-pen);
+   }},
+
+  {id:'procedure', nome:'Procedure Sicurezza', peso:7, v5peso:8,
+   desc:'0=nessuna conoscenza → 5=conoscenza perfetta e applicazione costante.',
+   campi:[{id:'proc_score',label:'Score 0-5',type:'number',min:0,max:5,step:0.5,placeholder:'3'}],
+   formula: d => isVal(d.proc_score)?Math.max(0,Math.min(5,+d.proc_score)):3},
+
+  {id:'dpi', nome:'DPI', peso:11, v5peso:12,
+   desc:'Tre sotto-indici (utilizzo, controllo, conservazione) — media automatica.',
+   campi:[
+     {id:'dpi_ut',label:'Utilizzo 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
+     {id:'dpi_ct',label:'Controllo 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
+     {id:'dpi_cn',label:'Conservazione 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
+   ],
+   formula: d => {
+     const ut=isVal(d.dpi_ut)?+d.dpi_ut:5;
+     const ct=isVal(d.dpi_ct)?+d.dpi_ct:5;
+     const cn=isVal(d.dpi_cn)?+d.dpi_cn:5;
+     return parseFloat(((ut+ct+cn)/3).toFixed(2));
+   }},
+
+  {id:'ispezioni', nome:'Giorni Ispezione', peso:13, v5peso:15,
+   desc:'Numero giorni di visita ispettiva nel trimestre. Con ore lavorate: ratio GG/(ore/8).',
+   campi:[
+     {id:'gg_isp',label:'N. giorni',type:'number',min:0,placeholder:'0'},
+     {id:'ore_isp',label:'Ore lav. (opz.)',type:'number',min:0,placeholder:''},
+   ],
+   formula: d => {
+     const gg=+d.gg_isp||0;
+     if(gg==0) return 2;
+     if(isVal(d.ore_isp)&&+d.ore_isp>0) {
+       const ratio=gg/(+d.ore_isp/8);
+       return ratio>=0.15?5:ratio>=0.1?4:ratio>=0.05?3:2;
+     }
+     return gg>=10?5:gg>=5?4:gg>=2?3:gg>=1?2:1;
+   }},
+
+  {id:'ore', nome:'Ore Lavorate', peso:13, v5peso:15,
+   desc:'Ore totali lavorate nel trimestre dalla squadra.',
+   campi:[{id:'tot_ore',label:'Tot. ore',type:'number',min:0,placeholder:'0'}],
+   formula: d => {
+     const o=+d.tot_ore||0;
+     if(o==0) return 2;
+     return o>60000?5:o>50000?4:o>40000?3:o>30000?2.5:o>20000?2:o>10000?1:0.5;
+   }},
+
+  {id:'unsafe', nome:'Unsafe Acts/Conditions', peso:9, v5peso:9,
+   desc:'Ratio osservazioni (OBS+NC) / numero ispezioni effettuate.',
+   campi:[
+     {id:'ua_oss',label:'N. osservazioni',type:'number',min:0,placeholder:'0'},
+     {id:'ua_isp',label:'N. ispezioni',type:'number',min:0,placeholder:'0'},
+   ],
+   formula: d => {
+     const oss=+d.ua_oss||0, isp=+d.ua_isp||0;
+     if(oss==0) return 5;
+     if(isp>0) {
+       const r=oss/isp;
+       return r<=1?4:r<=2?3:r<=3?2:r<=5?1:0;
+     }
+     return oss<=1?4:oss<=3?3:oss<=5?2:oss<=8?1:0;
+   }},
+
+  {id:'ac_chiusura', nome:'Chiusura AC', peso:8, v5peso:8,
+   desc:'% AC chiuse sul totale aperte. Nessuna AC aperta = score massimo.',
+   campi:[
+     {id:'ac_chiuse',label:'AC chiuse',type:'number',min:0,placeholder:'0'},
+     {id:'ac_totali',label:'AC totali',type:'number',min:0,placeholder:'0'},
+   ],
+   formula: d => {
+     const ch=+d.ac_chiuse||0, tot=+d.ac_totali||0;
+     if(tot==0) return 5;
+     const pct=ch/tot;
+     return pct>=1?5:pct>=0.8?4:pct>=0.6?3:pct>=0.4?2:pct>=0.2?1:0;
+   }},
+
+  {id:'conformita', nome:'Conformità Documentale', peso:6, v5peso:6,
+   desc:'% lavoratori con formazione, idoneità medica e DPI certificati in regola.',
+   campi:[{id:'doc_pct',label:'% conformità',type:'number',min:0,max:100,placeholder:'80'}],
+   formula: d => {
+     const p=+d.doc_pct||0;
+     return p>=100?5:p>=90?4:p>=80?3:p>=70?2:p>=50?1:0;
+   }},
+
+  {id:'formazione', nome:'Formazione/Briefing', peso:5, v5peso:5,
+   desc:'N. briefing HSE documentati. Indice PREMIANTE: 0=3pts, 1=4pts, 2+=5pts.',
+   campi:[{id:'n_briefing',label:'N. briefing',type:'number',min:0,placeholder:'0'}],
+   formula: d => {
+     const n=+d.n_briefing||0;
+     return n==0?3:n==1?4:5;
+   }},
+];
+
+const BANDE = [
+  {min:83,max:100,label:'OTTIMO',color:'#1a7a4a'},
+  {min:70,max:83,label:'BUONO',color:'#27ae60'},
+  {min:60,max:70,label:'DISCRETO',color:'#f39c12'},
+  {min:40,max:60,label:'SUFFICIENTE',color:'#e67e22'},
+  {min:20,max:40,label:'INSUFFICIENTE',color:'#e74c3c'},
+  {min:0,max:20,label:'GRAVEMENTE INSUFFICIENTE',color:'#c0392b'},
+];
+
+function getBanda(v){return BANDE.find(b=>v>=b.min&&v<=b.max)||BANDE[BANDE.length-1];}
+function isVal(v){return v!==''&&v!==null&&v!==undefined&&!isNaN(+v);}
+
+// ── STATO ─────────────────────────────────────────────────
+let currentSoggetto = null;
+let formData = {}; // {soggetto_key: {indice_id: {campo: valore}}}
+let savedData = {};
+let modified = false;
+
+// ── INIT ──────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  const m=new Date().getMonth()+1;
+  document.getElementById('f-trim').value=m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
+  document.getElementById('f-anno').value=new Date().getFullYear();
+  aggiornaSoggetti();
+});
+
+function aggiornaSoggetti() {
+  const sito = document.getElementById('f-cantiere').value;
+  const sogg = CANTIERI[sito]||[];
+  const grid = document.getElementById('soggetti-grid');
+  grid.innerHTML = sogg.map(s=>`
+    <button class="sogg-btn ${s.key==='somec'?'somec':''}" 
+      onclick="selezionaSoggetto('${s.key}','${s.nome}')">${s.nome}</button>
+  `).join('');
+  if(sogg.length) selezionaSoggetto(sogg[0].key, sogg[0].nome);
+}
+
+function selezionaSoggetto(key, nome) {
+  currentSoggetto = key;
+  document.querySelectorAll('.sogg-btn').forEach(b=>{
+    b.classList.toggle('active', b.textContent===nome);
+  });
+  document.getElementById('form-title').textContent = `Indici SPI — ${nome}`;
+  buildForm();
+}
+
+async function caricaDati() {
+  const anno=document.getElementById('f-anno').value;
+  const trim=document.getElementById('f-trim').value;
+  const sito=document.getElementById('f-cantiere').value;
+  document.getElementById('stato-salv').textContent='Caricamento...';
+  try {
+    const snap = await db.collection('spi_manuale')
+      .where('anno','==',parseInt(anno))
+      .where('trimestre','==',trim)
+      .where('sito','==',sito)
+      .get();
+    savedData = {};
+    snap.docs.forEach(d=>{const x=d.data();savedData[x.soggetto_key]=x.indici;});
+    formData = JSON.parse(JSON.stringify(savedData));
+    buildForm();
+    document.getElementById('stato-salv').textContent=`Dati ${trim} ${anno} caricati.`;
+  } catch(e){ showToast('❌ Errore: '+e.message); }
+}
+
+async function salvaDati() {
+  const anno=parseInt(document.getElementById('f-anno').value);
+  const trim=document.getElementById('f-trim').value;
+  const sito=document.getElementById('f-cantiere').value;
+  if(!currentSoggetto){showToast('Seleziona un soggetto');return;}
+
+  // Leggi tutti i valori dal form
+  const indiciData = {};
+  INDICI.forEach(ind=>{
+    const campiData={};
+    ind.campi.forEach(c=>{
+      const v=document.getElementById(`fi-${ind.id}-${c.id}`)?.value;
+      campiData[c.id]=v!==''?+v:null;
+    });
+    campiData._score = ind.formula(campiData);
+    indiciData[ind.id]=campiData;
+  });
+
+  const docId=`SPIM-${anno}-${trim}-${sito.replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}-${currentSoggetto.replace(/[^a-zA-Z0-9]/g,'_')}`;
+  try {
+    await db.collection('spi_manuale').doc(docId).set({
+      id:docId, anno, trimestre:trim, sito,
+      soggetto_key:currentSoggetto,
+      soggetto_nome:document.getElementById('form-title').textContent.replace('Indici SPI — ',''),
+      indici:indiciData,
+      timestamp:new Date().toISOString(),
+      fonte:'rspp_manuale',
+    });
+    savedData[currentSoggetto]=indiciData;
+    formData[currentSoggetto]=indiciData;
+    modified=false;
+    document.getElementById('stato-salv').textContent=`✅ Salvato ${new Date().toLocaleTimeString('it-IT')}`;
+    showToast('✅ Dati salvati');
+    buildForm();
+  } catch(e){ showToast('❌ Errore: '+e.message); }
+}
+
+function buildForm() {
+  if(!currentSoggetto) return;
+  const saved = formData[currentSoggetto]||{};
+  const grid = document.getElementById('indici-grid');
+  grid.innerHTML = INDICI.map(ind=>{
+    const campiSaved = saved[ind.id]||{};
+    const score = ind.formula(campiSaved);
+    const scoreColor = score>=4?'#1a7a4a':score>=3?'#f39c12':score>=2?'#e67e22':'#e74c3c';
+    const hasSaved = savedData[currentSoggetto]?.[ind.id];
+    return `<div class="indice-card ${ind.peso>=10?'required':''}">
+      <div class="indice-header">
+        <span class="indice-name">${ind.nome}</span>
+        <span class="indice-peso">${ind.peso}%${hasSaved?'<span class="badge-saved" style="margin-left:4px">✅</span>':''}</span>
+      </div>
+      <div class="indice-desc">${ind.desc}</div>
+      <div class="input-row">
+        ${ind.campi.map(c=>`
+          <span class="input-label">${c.label}</span>
+          <input type="${c.type}" class="spi-input"
+            id="fi-${ind.id}-${c.id}"
+            value="${campiSaved[c.id]??''}"
+            ${c.min!==undefined?`min="${c.min}"`:''}
+            ${c.max!==undefined?`max="${c.max}"`:''}
+            ${c.step!==undefined?`step="${c.step}"`:''}
+            placeholder="${c.placeholder||''}"
+            oninput="ricalcolaScore('${ind.id}')">
+        `).join('')}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <span style="font-size:10px;color:#7a8090">Score:</span>
+        <span class="score-display" id="score-${ind.id}" style="color:${scoreColor}">${score}</span>
+        <div class="score-bar"><div class="score-fill" id="bar-${ind.id}"
+          style="width:${score/5*100}%;background:${scoreColor}"></div></div>
+        <span style="font-size:10px;color:#7a8090">/ 5</span>
+      </div>
+    </div>`;
+  }).join('');
+  aggiornaVotoPreview();
+}
+
+function ricalcolaScore(indId) {
+  const ind = INDICI.find(i=>i.id===indId);
+  if(!ind) return;
+  const campiData={};
+  ind.campi.forEach(c=>{
+    const v=document.getElementById(`fi-${ind.id}-${c.id}`)?.value;
+    campiData[c.id]=v!==''?+v:null;
+  });
+  const score=ind.formula(campiData);
+  const scoreColor=score>=4?'#1a7a4a':score>=3?'#f39c12':score>=2?'#e67e22':'#e74c3c';
+  const el=document.getElementById(`score-${ind.id}`);
+  const bar=document.getElementById(`bar-${ind.id}`);
+  if(el){el.textContent=score;el.style.color=scoreColor;}
+  if(bar){bar.style.width=(score/5*100)+'%';bar.style.background=scoreColor;}
+  modified=true;
+  aggiornaVotoPreview();
+}
+
+function aggiornaVotoPreview() {
+  let somaPesi=0, somaScore=0;
+  INDICI.forEach(ind=>{
+    const campiData={};
+    ind.campi.forEach(c=>{
+      const v=document.getElementById(`fi-${ind.id}-${c.id}`)?.value;
+      campiData[c.id]=v!==''?+v:null;
+    });
+    const hasInput=ind.campi.some(c=>isVal(campiData[c.id]));
+    if(hasInput){
+      const s=ind.formula(campiData);
+      somaScore+=s*ind.peso;
+      somaPesi+=ind.peso;
+    }
+  });
+  const prev=document.getElementById('voto-preview');
+  const numEl=document.getElementById('voto-num');
+  const giuEl=document.getElementById('voto-giudizio');
+  const detEl=document.getElementById('voto-dettaglio');
+  if(somaPesi===0){prev.style.display='none';return;}
+  const voto=parseFloat((somaScore/somaPesi*20).toFixed(1));
+  const banda=getBanda(voto);
+  prev.style.display='flex';
+  prev.style.background=banda.color;
+  numEl.textContent=voto+'/100';
+  giuEl.textContent=banda.label;
+  detEl.textContent=`Calcolato su ${Math.round(somaPesi/100*100)}% degli indici disponibili`;
+}
+
+function showToast(msg,dur=3000){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+</script>
+</body>
+</html>
