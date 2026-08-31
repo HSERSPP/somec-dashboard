@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Check Solanord</title></head>
+<body style="font-family:monospace;padding:20px;font-size:12px">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<pre id="out">Caricamento...</pre>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+
+async function check() {
+  const out = document.getElementById('out');
+  
+  // 1. Cerca in audit_hse
+  const auditSnap = await db.collection('audit_hse').get();
+  const solanord = auditSnap.docs.map(d=>d.data()).filter(x=>
+    (x.impresa||'').toLowerCase().includes('solanord') ||
+    (x.impresa||'').toLowerCase().includes('solar')
+  );
+  
+  out.textContent = `=== AUDIT_HSE con Solanord: ${solanord.length} record ===\n`;
+  solanord.forEach(x => {
+    out.textContent += `\nID: ${x.id}\n`;
+    out.textContent += `  Sito: ${x.sito}\n`;
+    out.textContent += `  Impresa: ${x.impresa}\n`;
+    out.textContent += `  Anno: ${x.anno} | Trim: ${x.trimestre}\n`;
+    out.textContent += `  Fonte: ${x.fonte||'app'}\n`;
+    out.textContent += `  cnt_c:${x.cnt_c} cnt_nc:${x.cnt_nc} cnt_obs:${x.cnt_obs}\n`;
+    out.textContent += `  score_dpi: ${x.score_dpi}\n`;
+    out.textContent += `  giudizio: ${x.giudizio}\n`;
+    out.textContent += `  nc_list: ${JSON.stringify(x.nc_list||[])}\n`;
+  });
+
+  // 2. Cerca in spi_storico
+  const spiSnap = await db.collection('spi_storico').get();
+  const spiSol = spiSnap.docs.map(d=>d.data()).filter(x=>
+    (x.impresa||'').toLowerCase().includes('solanord')
+  );
+  
+  out.textContent += `\n=== SPI_STORICO con Solanord: ${spiSol.length} record ===\n`;
+  spiSol.forEach(x => {
+    out.textContent += `  ${x.anno}-${x.trimestre} | voto:${x.voto} | giudizio:${x.giudizio} | gg_isp:${x.gg_ispezione}\n`;
+    out.textContent += `  Tutti i campi: ${JSON.stringify(x)}\n\n`;
+  });
+}
+check();
+</script>
+</body>
+</html>
