@@ -658,7 +658,8 @@ function renderTrend() {
       }).join('')}
       </tbody>
     </table>
-    </div>`;
+    </div>
+    <div id="speedometer-section"></div>`;
 
   // Distruggi chart esistenti
   if (chartTrend) chartTrend.destroy();
@@ -696,9 +697,171 @@ function renderTrend() {
     },
     options:{responsive:true,plugins:{legend:{labels:{font:{size:11},boxWidth:14}}},scales:{y:{beginAtZero:true,grid:{color:'#f0f2f5'},ticks:{color:'#7a8090',font:{size:11}}},x:{grid:{display:false},ticks:{color:'#7a8090',font:{size:11}}}}}
   });
+  renderSpeedometer();
 }
 
-// ── AZIONI CORRETTIVE ─────────────────────────────────────
+// ── STRUTTURA CANTIERI E FORNITORI (da speedometer v5) ────
+const CANTIERI_CONFIG = [
+  {nome:'Genova',     sito:'Genova (Fincantieri)',
+   fornitori:['Giemmeci','HB Montaggi','Macris']},
+  {nome:'Marghera',   sito:'Marghera (Fincantieri)',
+   fornitori:['Technik','Solanord','Artigiano del Metallo']},
+  {nome:'Monfalcone', sito:'Monfalcone (Fincantieri)',
+   fornitori:['Sotrade','PLG','TSM']},
+  {nome:'Turku',      sito:'Turku (Meyer)',
+   fornitori:['Sotrade','Finistratum','SVM','Fabrilis','Falmot','TKY','Novus']},
+  {nome:'Saint-Nazaire',sito:"Saint-Nazaire (Chantiers de l'Atlantique)",
+   fornitori:['Technik','Borhan']},
+  {nome:'Papenburg',  sito:'Papenburg (Meyer Werft)',
+   fornitori:['Technik','GC Nautica']},
+];
+
+function drawSpeedSVG(voto, nome, isNE) {
+  const w=200, h=130, cx=100, cy=105, Ro=85, Ri=52;
+  const BANDS_SVG = [
+    {lo:0,  hi:20,  color:'#c0392b'},
+    {lo:20, hi:40,  color:'#e67e22'},
+    {lo:40, hi:60,  color:'#f1c40f'},
+    {lo:60, hi:70,  color:'#a9d18e'},
+    {lo:70, hi:83,  color:'#70ad47'},
+    {lo:83, hi:100, color:'#375623'},
+  ];
+  const polarX = (r,deg) => cx + r*Math.cos((deg)*Math.PI/180);
+  const polarY = (r,deg) => cy + r*Math.sin((deg)*Math.PI/180);
+  // angolo: 180° = sinistra (0), 360°=destra (100)
+  const valToAngle = v => 180 + (v/100)*180;
+
+  let arcs = '';
+  BANDS_SVG.forEach(b => {
+    const a0 = valToAngle(b.lo), a1 = valToAngle(b.hi);
+    const x1=polarX(Ro,a0),y1=polarY(Ro,a0);
+    const x2=polarX(Ro,a1),y2=polarY(Ro,a1);
+    const xi1=polarX(Ri,a0),yi1=polarY(Ri,a0);
+    const xi2=polarX(Ri,a1),yi2=polarY(Ri,a1);
+    const large = (a1-a0)>180?1:0;
+    const col = isNE ? '#d0d0d0' : b.color;
+    arcs += `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${Ro},${Ro} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${Ri},${Ri} 0 ${large},0 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${col}"/>`;
+  });
+
+  // Linee di separazione bande
+  let lines = '';
+  [0,20,40,60,70,83,100].forEach(v => {
+    const a=valToAngle(v);
+    lines += `<line x1="${polarX(Ri-2,a).toFixed(1)}" y1="${polarY(Ri-2,a).toFixed(1)}" x2="${polarX(Ro+2,a).toFixed(1)}" y2="${polarY(Ro+2,a).toFixed(1)}" stroke="white" stroke-width="2"/>`;
+  });
+
+  // Cerchio interno bianco
+  const circle = `<circle cx="${cx}" cy="${cy}" r="${Ri}" fill="white"/>`;
+
+  // Ago
+  let needle = '';
+  if (!isNE && voto !== null) {
+    const a = valToAngle(Math.max(0,Math.min(100,voto)));
+    const nx=polarX(Ro-6,a), ny=polarY(Ro-6,a);
+    const p1x=polarX(8,a+90), p1y=polarY(8,a+90);
+    const p2x=polarX(8,a-90), p2y=polarY(8,a-90);
+    needle = `<polygon points="${nx.toFixed(1)},${ny.toFixed(1)} ${p1x.toFixed(1)},${p1y.toFixed(1)} ${p2x.toFixed(1)},${p2y.toFixed(1)}" fill="#003366"/>`;
+  }
+  const hub = `<circle cx="${cx}" cy="${cy}" r="7" fill="#003366"/><circle cx="${cx}" cy="${cy}" r="4" fill="white"/>`;
+
+  // Testo valore
+  const valText = isNE
+    ? `<text x="${cx}" y="${cy-12}" text-anchor="middle" font-size="13" font-weight="bold" fill="#aaa">N.E.</text>`
+    : `<text x="${cx}" y="${cy-12}" text-anchor="middle" font-size="16" font-weight="bold" fill="#003366">${voto}</text>`;
+
+  // Nome soggetto (max 22 char)
+  const nomeShort = nome.length>22 ? nome.substring(0,21)+'…' : nome;
+  const nomeText = `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="#555">${nomeShort}</text>`;
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    ${arcs}${lines}${circle}${needle}${hub}${valText}${nomeText}
+  </svg>`;
+}
+
+function renderSpeedometer() {
+  const sec = document.getElementById('speedometer-section');
+  if (!sec) return;
+
+  // Calcola voto per sito/impresa dagli audit caricati
+  const getVoto = (sito, impresa) => {
+    // Usa tutti i trimestri caricati in DATA_TREND
+    let auditsTot = [];
+    TRIMESTRI.forEach(q => {
+      const d = DATA_TREND[q];
+      if (!d) return;
+      const filtered = d.audits.filter(a => {
+        const sitoOk = a.sito === sito;
+        if (!sitoOk) return false;
+        if (!impresa) return true; // Somec = tutti gli audit del sito con impresa Somec
+        return (a.impresa||'').toLowerCase().includes(impresa.toLowerCase()) ||
+               (a.impresa||'').toLowerCase().includes('somec');
+      });
+      // Se impresa specificata, filtra solo quella
+      if (impresa) {
+        const exact = d.audits.filter(a =>
+          a.sito === sito &&
+          (a.impresa||'').toLowerCase().includes(impresa.toLowerCase())
+        );
+        auditsTot = [...auditsTot, ...exact];
+      } else {
+        // Somec = audit con impresa Somec
+        const somecAudit = d.audits.filter(a =>
+          a.sito === sito &&
+          (a.impresa||'').toLowerCase().includes('somec')
+        );
+        auditsTot = [...auditsTot, ...somecAudit];
+      }
+    });
+    if (!auditsTot.length) return null;
+    const scores = calcSPI(auditsTot, DATA.safereports.filter(s=>s.sito===sito), DATA.preposti.filter(p=>p.sito===sito));
+    return calcVoto(scores);
+  };
+
+  let html = `<div class="section-title" style="margin-top:24px">🎯 Speedometer SPI — Per Cantiere e Soggetto</div>`;
+
+  // Stabilimento
+  const votoStab = (() => {
+    let a=[], sr=[], pr=[];
+    TRIMESTRI.forEach(q=>{
+      const d=DATA_TREND[q]; if(!d) return;
+      a=[...a,...d.audits.filter(x=>x.sito==='Stabilimento Somec -- sede principale')];
+      sr=[...sr,...d.safereports.filter(x=>x.sito==='Stabilimento Somec -- sede principale')];
+      pr=[...pr,...d.preposti.filter(x=>x.sito==='Stabilimento Somec -- sede principale')];
+    });
+    if(!a.length&&!sr.length&&!pr.length) return null;
+    return calcVoto(calcSPI(a,sr,pr));
+  })();
+
+  html += `<div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">
+    <div style="font-size:12px;font-weight:700;color:#1a4a7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;border-bottom:2px solid #1a4a7a;padding-bottom:6px">🏭 Stabilimento Somec</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start">
+      <div style="text-align:center">${drawSpeedSVG(votoStab??0,'Somec Stabilimento',votoStab===null)}</div>
+    </div>
+  </div>`;
+
+  // Cantieri
+  CANTIERI_CONFIG.forEach(c => {
+    const votoSomec = getVoto(c.sito, 'somec');
+    const fornHtml = c.fornitori.map(f => {
+      const v = getVoto(c.sito, f);
+      return `<div style="text-align:center">${drawSpeedSVG(v??0,f,v===null)}</div>`;
+    }).join('');
+
+    html += `<div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:#1a4a7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;border-bottom:2px solid #1a4a7a;padding-bottom:6px">🚢 ${c.nome}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">
+        <div style="text-align:center;border-right:2px solid #f0f2f5;padding-right:12px;margin-right:4px">
+          ${drawSpeedSVG(votoSomec??0,'Somec – '+c.nome,votoSomec===null)}
+        </div>
+        ${fornHtml}
+      </div>
+    </div>`;
+  });
+
+  sec.innerHTML = html;
+}
+
+
 function renderAC() {
   const cont = document.getElementById('ac-content');
   const oggi = new Date().toISOString().slice(0,10);
