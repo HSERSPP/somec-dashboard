@@ -614,13 +614,15 @@ function renderSPI(anno,trim,sito) {
 
   const nNC=a.reduce((s,x)=>s+(x.cnt_nc||0),0);
   const nOBS=a.reduce((s,x)=>s+(x.cnt_obs||0),0);
-  const nNM=sr.filter(s=>s.tipo==='near_miss').length;
+  const srAll = DATA.safereports_all || DATA.safereports;
+  const nNM=srAll.filter(s=>s.tipo==='near_miss').length;
+  const nInf=srAll.filter(s=>s.tipo==='infortunio').length;
   const nBrf=pr.reduce((s,p)=>s+(p.briefing_count||0),0);
 
   let html=`<div class="overview-grid">
     <div class="ov-card blue"><div class="ov-icon">🔍</div><div class="ov-num">${a.length}</div><div class="ov-label">Audit effettuati</div><div class="ov-sub">${trim} ${anno}</div></div>
     <div class="ov-card red"><div class="ov-icon">⚠️</div><div class="ov-num">${nNC}</div><div class="ov-label">Non Conformità</div><div class="ov-sub">${nOBS} Osservazioni</div></div>
-    <div class="ov-card amber"><div class="ov-icon">🚨</div><div class="ov-num">${nNM}</div><div class="ov-label">Near Miss</div><div class="ov-sub">${sr.filter(s=>s.tipo==='infortunio').length} Infortuni</div></div>
+    <div class="ov-card amber"><div class="ov-icon">🚨</div><div class="ov-num">${nNM}</div><div class="ov-label">Near Miss</div><div class="ov-sub">${nInf} Infortuni</div></div>
     <div class="ov-card green"><div class="ov-icon">👷</div><div class="ov-num">${nBrf}</div><div class="ov-label">Briefing HSE</div><div class="ov-sub">${pr.length} controlli preposti</div></div>
   </div>`;
 
