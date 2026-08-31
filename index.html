@@ -460,14 +460,16 @@ async function loadData() {
     let qSPrev = db.collection('safereport').where('anno','==',anno-1);
     if (sito!=='ALL') qSPrev = qSPrev.where('sito','==',sito);
 
-    const [ra,rs,rp,rSAll,rSPrev,rSpiSto] = await Promise.all([
+    const [ra,rs,rp,rSAll,rSPrev,rSpiSto,rOre] = await Promise.all([
       qA.get(),qS.get(),qP.get(),qSAll.get(),qSPrev.get(),
-      db.collection('spi_storico').where('anno','==',anno).get()
+      db.collection('spi_storico').where('anno','==',anno).get(),
+      db.collection('ore_lavorate').where('anno','==',anno).get()
     ]);
     DATA.audits      = ra.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.safereports = rs.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.preposti    = rp.docs.map(d=>({...d.data(),_id:d.id}));
     DATA.spi_storico = rSpiSto.docs.map(d=>d.data());
+    DATA.ore_lavorate = rOre.docs.map(d=>d.data());
     // Array completo per tab AC (tutto l'anno + anno precedente)
     const allIds = new Set();
     DATA.safereports_all = [...rSAll.docs,...rSPrev.docs]
@@ -526,10 +528,22 @@ function calcSPI(a,sr,pr) {
   const nI = a.length;
   scores.ispezioni = nI>=8?5:nI>=6?4:nI>=4?3:nI>=2?2:nI>=1?1:0;
 
-  // Ore lavorate — somma da safereport se presente, altrimenti N.E.
-  const oreArr = sr.filter(s=>s.ore_lavorate>0);
-  if(!oreArr.length){scores.ore=null;}
-  else{const tot=oreArr.reduce((s,x)=>s+(x.ore_lavorate||0),0);scores.ore=tot>=2000?5:tot>=1500?4:tot>=1000?3:tot>=500?2:1;}
+  // Ore lavorate — formula esatta dall'Excel cella AA
+  // IF(M="",2, IF(M>60000,5, IF(M>50000,4, IF(M>40000,3, IF(M>30000,2.5, IF(M>20000,2, IF(M>10000,1,0.5)))))))
+  const trim = document.getElementById('f-trim')?.value || 'ANNO';
+  const oreFiltrate = (DATA.ore_lavorate||[]).filter(o => {
+    const trimMatch = trim==='ANNO' || o.trimestre===trim;
+    return trimMatch && o.ore > 0;
+  });
+  const totOre = oreFiltrate.reduce((s,o)=>s+(o.ore||0),0);
+  if (!totOre) { scores.ore = 2; } // neutro se non inserite
+  else if (totOre>60000) scores.ore = 5;
+  else if (totOre>50000) scores.ore = 4;
+  else if (totOre>40000) scores.ore = 3;
+  else if (totOre>30000) scores.ore = 2.5;
+  else if (totOre>20000) scores.ore = 2;
+  else if (totOre>10000) scores.ore = 1;
+  else scores.ore = 0.5;
 
   if(a.length===0){scores.unsafe=null;}
   else{const tot=a.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0);const ratio=tot/a.length;scores.unsafe=ratio===0?5:ratio<=1?4:ratio<=2?3:ratio<=3?2:ratio<=5?1:0;}
