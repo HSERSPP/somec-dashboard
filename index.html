@@ -278,7 +278,28 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
   </div>
 </div>
 
-<!-- MODAL GESTIONE OBS -->
+<!-- MODAL CHIUSURA SEGNALAZIONE HSE -->
+<div class="modal-overlay" id="modal-segn">
+  <div class="modal">
+    <div class="modal-header">✅ Chiudi Segnalazione HSE<button class="modal-close" onclick="closeModalSegn()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;margin-bottom:12px">Stai per segnare come <strong>CHIUSA</strong> la seguente segnalazione:</p>
+      <div id="modal-segn-text" style="font-size:12px;background:#f4f5f7;padding:10px;border-radius:6px;margin-bottom:12px"></div>
+      <div class="filter-group" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Data chiusura</label>
+        <input type="date" id="modal-segn-data" style="border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit;width:100%">
+      </div>
+      <div class="filter-group" style="flex-direction:column;align-items:flex-start;gap:4px;margin-top:10px">
+        <label style="font-size:11px;font-weight:700;color:var(--gray-mid);text-transform:uppercase">Come è stata risolta</label>
+        <textarea id="modal-segn-nota" style="border:1px solid var(--gray-border);border-radius:6px;padding:7px 10px;font-size:12px;font-family:inherit;width:100%;min-height:60px;resize:vertical" placeholder="Descrivi l'azione intrapresa e come è stata risolta..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-action btn-blue" onclick="closeModalSegn()">Annulla</button>
+      <button class="btn-action btn-green" onclick="confirmChiusuraSegn()">✅ Conferma chiusura</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-obs">
   <div class="modal">
     <div class="modal-header" id="modal-obs-header">👁 Gestione Osservazione<button class="modal-close" onclick="closeModalOBS()">×</button></div>
@@ -841,14 +862,15 @@ function renderAC() {
 
   html += `<div class="section-title" style="margin-top:20px">📧 Segnalazioni HSE Aperte (${rsppAperte.length})</div>
   <div class="table-card"><table class="data-table">
-    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Segnalato da</th><th>Destinatario</th><th>Scadenza</th></tr></thead>
+    <thead><tr><th>Data</th><th>Tipo</th><th>Descrizione</th><th>Segnalato da</th><th>Destinatario</th><th>Scadenza</th><th>Azione</th></tr></thead>
     <tbody>`;
   if (!rsppAperte.length) {
-    html += '<tr><td colspan="6" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna segnalazione HSE aperta.</td></tr>';
+    html += '<tr><td colspan="7" style="text-align:center;color:var(--gray-mid);padding:16px">Nessuna segnalazione HSE aperta.</td></tr>';
   } else {
     rsppAperte.forEach(s => {
       const scad = s.scadenza || '—';
       const scadStyle = scad!=='—' && scad < oggi ? 'color:var(--red);font-weight:700' : '';
+      const descSafe = (s.descrizione||'').substring(0,60).replace(/'/g,"\\'");
       html += `<tr>
         <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
         <td>${tipoRsppLabel(s.tipo)}</td>
@@ -856,6 +878,7 @@ function renderAC() {
         <td style="font-size:11px;color:var(--blue)">${getSegnalante(s)}</td>
         <td style="font-size:11px">${s.destinatario||'—'}</td>
         <td style="${scadStyle}">${scad}</td>
+        <td><button class="btn-chiudi" onclick="apriModalSegn('${s._id||s.id}','${descSafe}')">Chiudi</button></td>
       </tr>`;
     });
   }
@@ -884,7 +907,41 @@ function renderAC() {
   cont.innerHTML = html;
 }
 
-let pendingOBS = null;
+let pendingSegn = null;
+
+function apriModalSegn(id, testo) {
+  pendingSegn = id;
+  document.getElementById('modal-segn-text').textContent = testo;
+  document.getElementById('modal-segn-data').value = new Date().toISOString().slice(0,10);
+  document.getElementById('modal-segn-nota').value = '';
+  document.getElementById('modal-segn').classList.add('show');
+}
+
+function closeModalSegn() {
+  document.getElementById('modal-segn').classList.remove('show');
+  pendingSegn = null;
+}
+
+async function confirmChiusuraSegn() {
+  if (!pendingSegn) return;
+  const data = document.getElementById('modal-segn-data').value;
+  const nota = document.getElementById('modal-segn-nota').value;
+  if (!data) { showToast('⚠️ Inserisci la data di chiusura'); return; }
+  try {
+    await db.collection('safereport').doc(pendingSegn).update({
+      stato: 'chiusa',
+      data_chiusura: data,
+      nota_chiusura: nota,
+    });
+    showToast('✅ Segnalazione chiusa');
+    closeModalSegn();
+    // Aggiorna localmente
+    const sr = DATA.safereports_all || DATA.safereports;
+    const idx = sr.findIndex(s=>(s._id||s.id)===pendingSegn);
+    if (idx>=0) { sr[idx].stato='chiusa'; sr[idx].data_chiusura=data; sr[idx].nota_chiusura=nota; }
+    renderAC();
+  } catch(e) { showToast('❌ Errore: '+e.message); }
+}
 
 function apriModalOBS(auditId, voceId, testo, stato) {
   pendingOBS = {auditId, voceId, stato};
