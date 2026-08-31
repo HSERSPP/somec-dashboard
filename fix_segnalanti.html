@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Fix Segnalanti</title></head>
+<body style="font-family:monospace;padding:20px">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<button onclick="fix()" style="padding:10px 20px;background:#1a7a4a;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer">🔧 Aggiorna segnalanti in Firestore</button>
+<pre id="out" style="margin-top:16px">Pronto — clicca il tasto.</pre>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+
+// Mappa ID -> segnalante corretto dalle email originali
+const FIXES = {
+  'SR-RSPP-20260413-01': 'Adriano Bettin (Preposto)',
+  'SR-RSPP-20260417-01': 'Pietro D Amico (Coord. Imballo)',
+  'SR-RSPP-20260508-01': 'Loris Da Ros (RLS)',
+  'SR-RSPP-20260323-01': 'Alessandro Fardin (Preposto Vetreria)',
+};
+
+async function fix() {
+  const out = document.getElementById('out');
+  out.textContent = 'Aggiornamento in corso...\n';
+  for (const [id, segnalante] of Object.entries(FIXES)) {
+    try {
+      await db.collection('safereport').doc(id).update({ segnalato_da: segnalante });
+      out.textContent += `✅ ${id} -> ${segnalante}\n`;
+    } catch(e) {
+      out.textContent += `❌ ${id}: ${e.message}\n`;
+    }
+  }
+  out.textContent += '\nFatto! Ricarica la dashboard.';
+}
+</script>
+</body>
+</html>
