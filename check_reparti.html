@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Check Reparti</title></head>
+<body style="font-family:monospace;padding:20px;font-size:11px">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<pre id="out">Caricamento...</pre>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+
+const AREA_TO_REPARTO = {
+  'SR-B2-20251128-01':'RE','SR-B2-20251209-01':'R3','SR-B2-20260210-01':'R3',
+  'SR-B2-20260306-01':'R4','SR-B2-20260609-01':'R5','SR-B2-20260716-01':'RE',
+  'SR-B2-20260724-01':'R5','SR-RSPP-20251128-01':'RE','SR-RSPP-20260113-01':'R5.1',
+  'SR-RSPP-20260114-01':'S','SR-RSPP-20260211-01':'R8','SR-RSPP-20260213-01':'S',
+  'SR-RSPP-20260310-01':'S','SR-RSPP-20260311-01':'RE','SR-RSPP-20260311-02':'R3',
+  'SR-RSPP-20260323-01':'R8','SR-RSPP-20260327-01':'R5','SR-RSPP-20260327-02':'R3',
+  'SR-RSPP-20260327-03':'R8','SR-RSPP-20260327-04':'R3','SR-RSPP-20260413-01':'S',
+  'SR-RSPP-20260417-01':'R5.1','SR-RSPP-20260508-01':'R3.1','SR-RSPP-20260604-01':'R4',
+  'SR-RSPP-20260605-01':'R8','SR-RSPP-20260612-01':'R4','SR-RSPP-20260612-02':'R3',
+  'SR-RSPP-20260612-03':'R4','SR-RSPP-20260626-01':'R7','SR-RSPP-20260702-01':'RE',
+  'SR-RSPP-20260703-01':'R1','SR-RSPP-20260717-01':'R8','SR-RSPP-20260721-01':'S',
+  'SR-RSPP-20260807-01':'R3',
+};
+
+const REPARTI = ['R1','R3','R3.1','R4','R5','R5.1','R7','R8','RE'];
+
+async function check() {
+  const out = document.getElementById('out');
+  const SITO = 'Stabilimento Somec -- sede principale';
+
+  const [auditSnap, srSnap, prSnap] = await Promise.all([
+    db.collection('audit_hse').where('sito','==',SITO).get(),
+    db.collection('safereport').where('sito','==',SITO).get(),
+    db.collection('preposti').where('sito','==',SITO).get(),
+  ]);
+
+  const audits = auditSnap.docs.map(d=>d.data());
+  const srs    = srSnap.docs.map(d=>d.data());
+  const preps  = prSnap.docs.map(d=>d.data());
+
+  out.textContent = `AUDIT stabilimento: ${audits.length}\nSAFEREPORT stabilimento: ${srs.length}\nPREPOSTI stabilimento: ${preps.length}\n\n`;
+
+  // Per ogni reparto mostra i dati disponibili
+  REPARTI.forEach(rep => {
+    const aR = audits.filter(a=>a.reparto===rep && a.fonte!=='pdf_import');
+    const sR = srs.filter(s=>AREA_TO_REPARTO[s.id||s._id]===rep);
+    const pR = preps.filter(p=>p.ramo===rep||p.reparto===rep);
+
+    out.textContent += `=== ${rep} ===\n`;
+    out.textContent += `  Audit reali: ${aR.length}\n`;
+    out.textContent += `  SafeReport: ${sR.length} (${sR.map(s=>s.tipo).join(', ')||'—'})\n`;
+    out.textContent += `  Preposti: ${pR.length}\n`;
+    if(aR.length) {
+      aR.forEach(a=>out.textContent += `    Audit: NC=${a.cnt_nc} OBS=${a.cnt_obs} score_dpi=${a.score_dpi} giudizio=${a.giudizio}\n`);
+    }
+    out.textContent += '\n';
+  });
+}
+check();
+</script>
+</body>
+</html>
