@@ -367,10 +367,13 @@ async function salvaDati() {
 
   const docId=`SPIM-${anno}-${trim}-${sito.replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}-${currentSoggetto.replace(/[^a-zA-Z0-9]/g,'_')}`;
   try {
+    const isReparto = ['R1','R3','R3.1','R4','R5','R5.1','R7','R8','RE'].includes(currentSoggetto);
     await db.collection('spi_manuale').doc(docId).set({
       id:docId, anno, trimestre:trim, sito,
       soggetto_key:currentSoggetto,
       soggetto_nome:document.getElementById('form-title').textContent.replace('Indici SPI — ',''),
+      reparto: isReparto ? currentSoggetto : null,
+      is_reparto: isReparto,
       indici:indiciData,
       timestamp:new Date().toISOString(),
       fonte:'rspp_manuale',
