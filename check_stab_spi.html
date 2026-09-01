@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Check Stabilimento SPI</title></head>
+<body style="font-family:monospace;padding:20px;font-size:11px">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<pre id="out">Caricamento...</pre>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+async function check() {
+  const out = document.getElementById('out');
+  
+  // Cosa c'è in spi_storico per lo stabilimento?
+  const snap = await db.collection('spi_storico').get();
+  const stab = snap.docs.map(d=>d.data()).filter(x=>
+    (x.sito||'').includes('Stabilimento') || (x.impresa||'').includes('Stabilimento')
+  );
+  out.textContent = `=== SPI_STORICO Stabilimento: ${stab.length} record ===\n`;
+  stab.forEach(x=>out.textContent += JSON.stringify(x)+'\n\n');
+
+  // Cosa c'è in spi_manuale per lo stabilimento?
+  const snap2 = await db.collection('spi_manuale').get();
+  const stab2 = snap2.docs.map(d=>d.data()).filter(x=>
+    (x.sito||'').includes('Stabilimento')
+  );
+  out.textContent += `\n=== SPI_MANUALE Stabilimento: ${stab2.length} record ===\n`;
+  stab2.forEach(x=>out.textContent += JSON.stringify(x)+'\n\n');
+
+  // Cosa c'è in audit_hse per lo stabilimento?
+  const snap3 = await db.collection('audit_hse').get();
+  const stab3 = snap3.docs.map(d=>d.data()).filter(x=>
+    (x.sito||'').includes('Stabilimento')
+  );
+  out.textContent += `\n=== AUDIT_HSE Stabilimento: ${stab3.length} record ===\n`;
+  stab3.forEach(x=>out.textContent += `${x.id} | fonte:${x.fonte} | cnt_nc:${x.cnt_nc} | score_dpi:${x.score_dpi}\n`);
+}
+check();
+</script>
+</body>
+</html>
