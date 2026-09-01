@@ -958,7 +958,7 @@ const CANTIERI_CONFIG = [
 ];
 
 function drawSpeedSVG(voto, nome, isNE) {
-  const w=200, h=150, cx=100, cy=115, Ro=85, Ri=52;
+  const w=200, h=160, cx=100, cy=105, Ro=85, Ri=52;
   const BANDS_SVG = [
     {lo:0,  hi:20,  color:'#c0392b'},
     {lo:20, hi:40,  color:'#e67e22'},
@@ -1001,32 +1001,29 @@ function drawSpeedSVG(voto, nome, isNE) {
   }
   const hub=`<circle cx="${cx}" cy="${cy}" r="7" fill="#003366"/><circle cx="${cx}" cy="${cy}" r="4" fill="white"/>`;
 
-  // Numero in alto dentro il cerchio, sopra la lancetta
-  const valText = isNE
-    ? `<text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="13" font-weight="bold" fill="#aaa">N.E.</text>`
-    : `<text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="18" font-weight="bold" fill="#003366">${voto}</text>`;
-
   // Giudizio — ricavato dalla banda
   let giudizio='', giudizioColor='#aaa';
   if(!isNE && voto!==null){
     const b=getBanda(voto);
     const ABBR = {
-      'OTTIMO':'OTTIMO',
-      'BUONO':'BUONO',
-      'DISCRETO':'DISCRETO',
-      'SUFFICIENTE':'SUFFICIENTE',
-      'INSUFFICIENTE':'INSUFFICIENTE',
+      'OTTIMO':'OTTIMO','BUONO':'BUONO','DISCRETO':'DISCRETO',
+      'SUFFICIENTE':'SUFFICIENTE','INSUFFICIENTE':'INSUFFICIENTE',
       'GRAVEMENTE INSUFF.':'GRAV. INSUFF.',
     };
     giudizio = ABBR[b.label] ?? b.label;
-    giudizioColor=b.color;
+    giudizioColor = b.color;
   }
 
-  // Nome soggetto (max 20 char)
+  // Numero sotto il perno della lancetta, tra hub e nome — non interferisce mai con la lancetta
+  const valText = isNE
+    ? `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="13" font-weight="bold" fill="#aaa">N.E.</text>`
+    : `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="16" font-weight="bold" fill="#003366">${voto}</text>`;
+
+  // Nome soggetto sotto il numero
   const nomeShort = nome.length>20?nome.substring(0,19)+'…':nome;
-  const nomeText=`<text x="${cx}" y="${cy+20}" text-anchor="middle" font-size="9" fill="#555">${nomeShort}</text>`;
+  const nomeText=`<text x="${cx}" y="${cy+27}" text-anchor="middle" font-size="9" fill="#555">${nomeShort}</text>`;
   const giudizioText = !isNE&&voto!==null
-    ? `<text x="${cx}" y="${cy+32}" text-anchor="middle" font-size="8" font-weight="bold" fill="${giudizioColor}">${giudizio}</text>`
+    ? `<text x="${cx}" y="${cy+38}" text-anchor="middle" font-size="8" font-weight="bold" fill="${giudizioColor}">${giudizio}</text>`
     : '';
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
