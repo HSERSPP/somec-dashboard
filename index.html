@@ -958,7 +958,7 @@ const CANTIERI_CONFIG = [
 ];
 
 function drawSpeedSVG(voto, nome, isNE) {
-  const w=200, h=130, cx=100, cy=105, Ro=85, Ri=52;
+  const w=200, h=150, cx=100, cy=115, Ro=85, Ri=52;
   const BANDS_SVG = [
     {lo:0,  hi:20,  color:'#c0392b'},
     {lo:20, hi:40,  color:'#e67e22'},
@@ -969,53 +969,68 @@ function drawSpeedSVG(voto, nome, isNE) {
   ];
   const polarX = (r,deg) => cx + r*Math.cos((deg)*Math.PI/180);
   const polarY = (r,deg) => cy + r*Math.sin((deg)*Math.PI/180);
-  // angolo: 180° = sinistra (0), 360°=destra (100)
   const valToAngle = v => 180 + (v/100)*180;
 
   let arcs = '';
   BANDS_SVG.forEach(b => {
-    const a0 = valToAngle(b.lo), a1 = valToAngle(b.hi);
+    const a0=valToAngle(b.lo), a1=valToAngle(b.hi);
     const x1=polarX(Ro,a0),y1=polarY(Ro,a0);
     const x2=polarX(Ro,a1),y2=polarY(Ro,a1);
     const xi1=polarX(Ri,a0),yi1=polarY(Ri,a0);
     const xi2=polarX(Ri,a1),yi2=polarY(Ri,a1);
-    const large = (a1-a0)>180?1:0;
-    const col = isNE ? '#d0d0d0' : b.color;
-    arcs += `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${Ro},${Ro} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${Ri},${Ri} 0 ${large},0 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${col}"/>`;
+    const large=(a1-a0)>180?1:0;
+    const col=isNE?'#d0d0d0':b.color;
+    arcs+=`<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${Ro},${Ro} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)} L${xi2.toFixed(1)},${yi2.toFixed(1)} A${Ri},${Ri} 0 ${large},0 ${xi1.toFixed(1)},${yi1.toFixed(1)} Z" fill="${col}"/>`;
   });
 
-  // Linee di separazione bande
-  let lines = '';
-  [0,20,40,60,70,83,100].forEach(v => {
+  let lines='';
+  [0,20,40,60,70,83,100].forEach(v=>{
     const a=valToAngle(v);
-    lines += `<line x1="${polarX(Ri-2,a).toFixed(1)}" y1="${polarY(Ri-2,a).toFixed(1)}" x2="${polarX(Ro+2,a).toFixed(1)}" y2="${polarY(Ro+2,a).toFixed(1)}" stroke="white" stroke-width="2"/>`;
+    lines+=`<line x1="${polarX(Ri-2,a).toFixed(1)}" y1="${polarY(Ri-2,a).toFixed(1)}" x2="${polarX(Ro+2,a).toFixed(1)}" y2="${polarY(Ro+2,a).toFixed(1)}" stroke="white" stroke-width="2"/>`;
   });
 
-  // Cerchio interno bianco
-  const circle = `<circle cx="${cx}" cy="${cy}" r="${Ri}" fill="white"/>`;
+  const circle=`<circle cx="${cx}" cy="${cy}" r="${Ri}" fill="white"/>`;
 
-  // Ago
-  let needle = '';
-  if (!isNE && voto !== null) {
-    const a = valToAngle(Math.max(0,Math.min(100,voto)));
+  let needle='';
+  if(!isNE && voto!==null){
+    const a=valToAngle(Math.max(0,Math.min(100,voto)));
     const nx=polarX(Ro-6,a), ny=polarY(Ro-6,a);
     const p1x=polarX(8,a+90), p1y=polarY(8,a+90);
     const p2x=polarX(8,a-90), p2y=polarY(8,a-90);
-    needle = `<polygon points="${nx.toFixed(1)},${ny.toFixed(1)} ${p1x.toFixed(1)},${p1y.toFixed(1)} ${p2x.toFixed(1)},${p2y.toFixed(1)}" fill="#003366"/>`;
+    needle=`<polygon points="${nx.toFixed(1)},${ny.toFixed(1)} ${p1x.toFixed(1)},${p1y.toFixed(1)} ${p2x.toFixed(1)},${p2y.toFixed(1)}" fill="#003366"/>`;
   }
-  const hub = `<circle cx="${cx}" cy="${cy}" r="7" fill="#003366"/><circle cx="${cx}" cy="${cy}" r="4" fill="white"/>`;
+  const hub=`<circle cx="${cx}" cy="${cy}" r="7" fill="#003366"/><circle cx="${cx}" cy="${cy}" r="4" fill="white"/>`;
 
-  // Testo valore
+  // Numero in alto dentro il cerchio, sopra la lancetta
   const valText = isNE
-    ? `<text x="${cx}" y="${cy-12}" text-anchor="middle" font-size="13" font-weight="bold" fill="#aaa">N.E.</text>`
-    : `<text x="${cx}" y="${cy-12}" text-anchor="middle" font-size="16" font-weight="bold" fill="#003366">${voto}</text>`;
+    ? `<text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="13" font-weight="bold" fill="#aaa">N.E.</text>`
+    : `<text x="${cx}" y="${cy-22}" text-anchor="middle" font-size="18" font-weight="bold" fill="#003366">${voto}</text>`;
 
-  // Nome soggetto (max 22 char)
-  const nomeShort = nome.length>22 ? nome.substring(0,21)+'…' : nome;
-  const nomeText = `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="#555">${nomeShort}</text>`;
+  // Giudizio — ricavato dalla banda
+  let giudizio='', giudizioColor='#aaa';
+  if(!isNE && voto!==null){
+    const b=getBanda(voto);
+    const ABBR = {
+      'OTTIMO':'OTTIMO',
+      'BUONO':'BUONO',
+      'DISCRETO':'DISCRETO',
+      'SUFFICIENTE':'SUFFICIENTE',
+      'INSUFFICIENTE':'INSUFFICIENTE',
+      'GRAVEMENTE INSUFF.':'GRAV. INSUFF.',
+    };
+    giudizio = ABBR[b.label] ?? b.label;
+    giudizioColor=b.color;
+  }
+
+  // Nome soggetto (max 20 char)
+  const nomeShort = nome.length>20?nome.substring(0,19)+'…':nome;
+  const nomeText=`<text x="${cx}" y="${cy+20}" text-anchor="middle" font-size="9" fill="#555">${nomeShort}</text>`;
+  const giudizioText = !isNE&&voto!==null
+    ? `<text x="${cx}" y="${cy+32}" text-anchor="middle" font-size="8" font-weight="bold" fill="${giudizioColor}">${giudizio}</text>`
+    : '';
 
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
-    ${arcs}${lines}${circle}${needle}${hub}${valText}${nomeText}
+    ${arcs}${lines}${circle}${needle}${hub}${valText}${nomeText}${giudizioText}
   </svg>`;
 }
 
