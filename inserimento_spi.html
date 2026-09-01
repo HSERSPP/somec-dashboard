@@ -34,14 +34,14 @@ select:focus,input:focus{outline:none;border-color:#2563a8}
 .sogg-btn.somec.active{background:#2563a8;border-color:#2563a8}
 
 /* Form indici */
-.indici-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
-.indice-card{background:#f8f9fb;border-radius:8px;padding:14px;border:1.5px solid #e0e4ea}
+.indici-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start}
+.indice-card{background:#f8f9fb;border-radius:8px;padding:14px;border:1.5px solid #e0e4ea;break-inside:avoid}
 .indice-card.required{border-color:#1a4a7a}
 .indice-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .indice-name{font-size:12px;font-weight:700;color:#1a1e28}
 .indice-peso{font-size:10px;background:#e8f0fa;color:#1a4a7a;border-radius:10px;padding:2px 7px;font-weight:700}
 .indice-desc{font-size:10px;color:#7a8090;margin-bottom:10px;line-height:1.4}
-.input-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.input-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
 .input-label{font-size:10px;color:#7a8090;font-weight:600;min-width:80px}
 .spi-input{width:90px;border:1.5px solid #d0d4da;border-radius:6px;padding:5px 8px;font-size:13px;font-family:inherit;text-align:center}
 .spi-input:focus{outline:none;border-color:#1a4a7a}
@@ -402,17 +402,19 @@ function buildForm() {
         <span class="indice-peso">${ind.peso}%${hasSaved?'<span class="badge-saved" style="margin-left:4px">✅</span>':''}</span>
       </div>
       <div class="indice-desc">${ind.desc}</div>
-      <div class="input-row">
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">
         ${ind.campi.map(c=>`
-          <span class="input-label">${c.label}</span>
-          <input type="${c.type}" class="spi-input"
-            id="fi-${ind.id}-${c.id}"
-            value="${campiSaved[c.id]??''}"
-            ${c.min!==undefined?`min="${c.min}"`:''}
-            ${c.max!==undefined?`max="${c.max}"`:''}
-            ${c.step!==undefined?`step="${c.step}"`:''}
-            placeholder="${c.placeholder||''}"
-            oninput="ricalcolaScore('${ind.id}')">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="input-label" style="min-width:140px;flex-shrink:0">${c.label}</span>
+            <input type="${c.type}" class="spi-input"
+              id="fi-${ind.id}-${c.id}"
+              value="${campiSaved[c.id]??''}"
+              ${c.min!==undefined?`min="${c.min}"`:''}
+              ${c.max!==undefined?`max="${c.max}"`:''}
+              ${c.step!==undefined?`step="${c.step}"`:''}
+              placeholder="${c.placeholder||''}"
+              oninput="ricalcolaScore('${ind.id}')">
+          </div>
         `).join('')}
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
