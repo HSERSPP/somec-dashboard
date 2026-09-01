@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Check Aree Stabilimento</title></head>
+<body style="font-family:monospace;padding:20px;font-size:11px">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<pre id="out">Caricamento...</pre>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+async function check() {
+  const out = document.getElementById('out');
+  const snap = await db.collection('safereport').get();
+  const stab = snap.docs.map(d=>d.data())
+    .filter(x=>x.sito==='Stabilimento Somec -- sede principale');
+  out.textContent = `Segnalazioni Stabilimento: ${stab.length}\n\n`;
+  stab.forEach(x => {
+    out.textContent += `${x.id}\n  area: "${x.area||''}"\n  tipo: ${x.tipo}\n\n`;
+  });
+}
+check();
+</script>
+</body>
+</html>
