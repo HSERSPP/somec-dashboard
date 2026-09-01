@@ -404,6 +404,104 @@ const BANDE = [
 
 function getBanda(voto){return BANDE.find(b=>voto>=b.min&&voto<=b.max)||BANDE[BANDE.length-1];}
 
+
+// ── MAPPATURA AREA → REPARTO STABILIMENTO ────────────────
+const AREA_TO_REPARTO = {
+  'SR-B2-20251128-01':   'RE',
+  'SR-B2-20251209-01':   'R3',
+  'SR-B2-20260210-01':   'R3',
+  'SR-B2-20260306-01':   'R4',
+  'SR-B2-20260609-01':   'R5',
+  'SR-B2-20260716-01':   'RE',
+  'SR-B2-20260724-01':   'R5',
+  'SR-RSPP-20251128-01': 'RE',
+  'SR-RSPP-20260113-01': 'R5.1',
+  'SR-RSPP-20260114-01': 'S',
+  // SR-RSPP-20260122-01 escluso (bordo nave Genova)
+  'SR-RSPP-20260211-01': 'R8',
+  'SR-RSPP-20260213-01': 'S',
+  'SR-RSPP-20260310-01': 'S',
+  'SR-RSPP-20260311-01': 'RE',
+  'SR-RSPP-20260311-02': 'R3',
+  'SR-RSPP-20260323-01': 'R8',
+  'SR-RSPP-20260327-01': 'R5',
+  'SR-RSPP-20260327-02': 'R3',
+  'SR-RSPP-20260327-03': 'R8',
+  'SR-RSPP-20260327-04': 'R3',
+  'SR-RSPP-20260413-01': 'S',
+  'SR-RSPP-20260417-01': 'R5.1',
+  'SR-RSPP-20260508-01': 'R3.1',
+  'SR-RSPP-20260604-01': 'R4',
+  'SR-RSPP-20260605-01': 'R8',
+  'SR-RSPP-20260612-01': 'R4',
+  'SR-RSPP-20260612-02': 'R3',
+  'SR-RSPP-20260612-03': 'R4',
+  'SR-RSPP-20260626-01': 'R7',
+  'SR-RSPP-20260702-01': 'RE',
+  'SR-RSPP-20260703-01': 'R1',
+  'SR-RSPP-20260717-01': 'R8',
+  'SR-RSPP-20260721-01': 'S',
+  'SR-RSPP-20260807-01': 'R3',
+};
+
+const REPARTI_CONFIG = [
+  {id:'R1',   nome:'R1 — Uffici'},
+  {id:'R3',   nome:'R3 — Lavorazione Alluminio'},
+  {id:'R3.1', nome:'R3.1 — Pianali'},
+  {id:'R4',   nome:'R4 — Assemblaggio'},
+  {id:'R5',   nome:'R5 — Magazzino'},
+  {id:'R5.1', nome:'R5.1 — Imballo'},
+  {id:'R7',   nome:'R7 — Carpenteria'},
+  {id:'R8',   nome:'R8 — Vetreria'},
+  {id:'RE',   nome:'RE — Area Esterna'},
+];
+
+function getRepartoPerSR(sr) {
+  return AREA_TO_REPARTO[sr._id||sr.id] || null;
+}
+
+function calcVotoReparto(reparto) {
+  // Audit filtrati per reparto
+  const auditR = DATA.audits.filter(a =>
+    a.sito === 'Stabilimento Somec -- sede principale' &&
+    a.reparto === reparto &&
+    a.fonte !== 'pdf_import' && a.fonte !== 'excel_import'
+  );
+
+  // SafeReport filtrati per reparto tramite mappatura
+  const srAll = DATA.safereports_all || DATA.safereports;
+  const srR = srAll.filter(s =>
+    s.sito === 'Stabilimento Somec -- sede principale' &&
+    getRepartoPerSR(s) === reparto
+  );
+
+  // Preposti filtrati per reparto
+  const prR = DATA.preposti.filter(p =>
+    p.sito === 'Stabilimento Somec -- sede principale' &&
+    (p.ramo === reparto || p.reparto === reparto)
+  );
+
+  if (!auditR.length && !srR.length && !prR.length) return null;
+  return calcVoto(calcSPI(auditR, srR, prR));
+}
+
+function renderSpeedometerReparti() {
+  const sec = document.getElementById('speedometer-reparti');
+  if (!sec) return;
+
+  let html = '<div class="section-title" style="margin-top:24px">🏭 Speedometer SPI — Reparti Stabilimento</div>';
+  html += '<div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">';
+
+  REPARTI_CONFIG.forEach(r => {
+    const voto = calcVotoReparto(r.id);
+    html += `<div style="text-align:center">${drawSpeedSVG(voto??0, r.nome, voto===null)}</div>`;
+  });
+
+  html += '</div></div>';
+  sec.innerHTML = html;
+}
+
 // ── STATO ─────────────────────────────────────────────────
 let DATA = {audits:[],safereports:[],preposti:[]};
 let DATA_TREND = {}; // {Q1:{audits,sr,pr}, Q2:{...}...}
@@ -697,12 +795,13 @@ function renderSPI(anno,trim,sito) {
   if(!evRec.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessuna segnalazione.</td></tr>';
   else evRec.forEach(e=>{html+=`<tr><td><code style="font-size:10px">${e.id||'—'}</code></td><td>${tipoL[e.tipo]||e.tipo||'—'}</td><td>${(e.sito||'—').split(' ')[0]}</td><td>${(e.data_ora||'—').substring(0,10)}</td><td><span class="badge ${e.stato==='chiusa'?'ottimo':'insufficiente'}">${e.stato||'aperta'}</span></td></tr>`;});
   html+='</tbody></table></div>';
-  html+=`<div id="speedometer-section-spi"></div>`;
+  html+=`<div id="speedometer-section-spi"></div><div id="speedometer-reparti"></div>`;
 
   document.getElementById('spi-content').innerHTML=html;
 
   // Renderizza speedometer dopo aver inserito l'HTML
   renderSpeedometerInto('speedometer-section-spi', sito);
+  renderSpeedometerReparti();
 }
 
 // ── TREND ─────────────────────────────────────────────────
@@ -760,7 +859,7 @@ function renderTrend() {
       </tbody>
     </table>
     </div>
-    <div id="speedometer-section"></div>`;
+    <div id="speedometer-section"></div><div id="speedometer-reparti-trend"></div>`;
 
   // Distruggi chart esistenti
   if (chartTrend) chartTrend.destroy();
@@ -881,6 +980,17 @@ function drawSpeedSVG(voto, nome, isNE) {
 
 function renderSpeedometer() {
   renderSpeedometerInto('speedometer-section', 'ALL');
+  // Render reparti nel trend
+  const secT = document.getElementById('speedometer-reparti-trend');
+  if(secT) {
+    // Crea elemento temporaneo, popola e copia
+    const tmp = document.createElement('div');
+    tmp.id = 'speedometer-reparti';
+    document.body.appendChild(tmp);
+    renderSpeedometerReparti();
+    secT.innerHTML = tmp.innerHTML;
+    document.body.removeChild(tmp);
+  }
 }
 
 function renderSpeedometerInto(targetId, sitoFiltro) {
