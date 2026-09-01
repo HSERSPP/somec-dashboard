@@ -461,28 +461,67 @@ function getRepartoPerSR(sr) {
 }
 
 function calcVotoReparto(reparto) {
-  // Audit filtrati per reparto
+  const anno = parseInt(document.getElementById('f-anno')?.value) || new Date().getFullYear();
+  const trim = document.getElementById('f-trim')?.value || 'ANNO';
+  const isAnnoIntero = trim==='ANNO'||trim==='Anno';
+
+  // PRIORITA 1: spi_manuale inserito dall'RSPP per questo reparto
+  const manuale = (DATA.spi_manuale||[]).filter(r =>
+    r.reparto===reparto &&
+    r.sito==='Stabilimento Somec -- sede principale' &&
+    r.anno===anno &&
+    (isAnnoIntero || r.trimestre===trim)
+  );
+  if (manuale.length) {
+    // Calcola voto dagli indici manuali
+    let somaPesi=0, somaScore=0;
+    const ind = manuale[0].indici||{};
+    const PESI = {infortuni:18,nearmiss:13,segnalazioni:13,procedure:7,dpi:11,
+                  ispezioni:13,ore:13,unsafe:9,ac_chiusura:8,conformita:6,formazione:5};
+    Object.entries(ind).forEach(([k,v])=>{
+      if(v && v._score!==undefined && PESI[k]) {
+        somaScore += v._score * PESI[k];
+        somaPesi  += PESI[k];
+      }
+    });
+    if(somaPesi>0) return parseFloat((somaScore/somaPesi*20).toFixed(1));
+  }
+
+  // PRIORITA 2: audit reali + segnalazioni per reparto
   const auditR = DATA.audits.filter(a =>
     a.sito === 'Stabilimento Somec -- sede principale' &&
     a.reparto === reparto &&
     a.fonte !== 'pdf_import' && a.fonte !== 'excel_import'
   );
-
-  // SafeReport filtrati per reparto tramite mappatura
   const srAll = DATA.safereports_all || DATA.safereports;
   const srR = srAll.filter(s =>
     s.sito === 'Stabilimento Somec -- sede principale' &&
     getRepartoPerSR(s) === reparto
   );
-
-  // Preposti filtrati per reparto
   const prR = DATA.preposti.filter(p =>
     p.sito === 'Stabilimento Somec -- sede principale' &&
     (p.ramo === reparto || p.reparto === reparto)
   );
 
   if (!auditR.length && !srR.length && !prR.length) return null;
-  return calcVoto(calcSPI(auditR, srR, prR));
+
+  // Calcola SPI con dati disponibili — opzione A:
+  // usa solo gli indici per cui ho dati reali, evita falsi neutri
+  const scores = calcSPI(auditR, srR, prR);
+
+  // Forza null per indici senza dati reali se non ho audit
+  if(!auditR.length) {
+    scores.procedure = null;
+    scores.dpi       = null;
+    scores.ispezioni = null;
+    scores.unsafe    = null;
+    scores.ac_chiusura = null;
+    scores.conformita  = null;
+    scores.formazione  = null;
+    scores.ore         = null;
+  }
+
+  return calcVoto(scores);
 }
 
 function renderSpeedometerReparti() {
@@ -560,16 +599,18 @@ async function loadData() {
     let qSPrev = db.collection('safereport').where('anno','==',anno-1);
     if (sito!=='ALL') qSPrev = qSPrev.where('sito','==',sito);
 
-    const [ra,rs,rp,rSAll,rSPrev,rSpiSto,rOre] = await Promise.all([
+    const [ra,rs,rp,rSAll,rSPrev,rSpiSto,rOre,rSpiMan] = await Promise.all([
       qA.get(),qS.get(),qP.get(),qSAll.get(),qSPrev.get(),
       db.collection('spi_storico').where('anno','==',anno).get(),
-      db.collection('ore_lavorate').where('anno','==',anno).get()
+      db.collection('ore_lavorate').where('anno','==',anno).get(),
+      db.collection('spi_manuale').where('anno','==',anno).get()
     ]);
-    DATA.audits      = ra.docs.map(d=>({...d.data(),_id:d.id}));
-    DATA.safereports = rs.docs.map(d=>({...d.data(),_id:d.id}));
-    DATA.preposti    = rp.docs.map(d=>({...d.data(),_id:d.id}));
-    DATA.spi_storico = rSpiSto.docs.map(d=>d.data());
+    DATA.audits       = ra.docs.map(d=>({...d.data(),_id:d.id}));
+    DATA.safereports  = rs.docs.map(d=>({...d.data(),_id:d.id}));
+    DATA.preposti     = rp.docs.map(d=>({...d.data(),_id:d.id}));
+    DATA.spi_storico  = rSpiSto.docs.map(d=>d.data());
     DATA.ore_lavorate = rOre.docs.map(d=>d.data());
+    DATA.spi_manuale  = rSpiMan.docs.map(d=>d.data());
     // Array completo per tab AC (tutto l'anno + anno precedente)
     const allIds = new Set();
     DATA.safereports_all = [...rSAll.docs,...rSPrev.docs]
