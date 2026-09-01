@@ -1115,7 +1115,7 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
         <div style="padding:8px 0;font-size:11px;color:#7a8090">
           <div style="margin-bottom:6px;font-weight:700;color:#1a4a7a">Voti per reparto:</div>
           <div style="display:flex;flex-direction:column;gap:3px">
-            ${votiReparti.map(r=>`<div>${r.nome.split('—')[0].trim()}: <strong style="color:${r.voto===null?'#bdc3c7':getBanda(r.voto).color}">${r.voto??'N.E.'}</strong>${r.voto!==null?' /100':''}</div>`).join('')}
+            ${votiReparti.map(r=>`<div>${r.nome}: <strong style="color:${r.voto===null?'#bdc3c7':getBanda(r.voto).color}">${r.voto??'N.E.'}</strong>${r.voto!==null?' /100':''}</div>`).join('')}
           </div>
           <div style="margin-top:8px;font-size:10px">Media su ${votiValidi.length}/${votiReparti.length} reparti con dati</div>
         </div>
