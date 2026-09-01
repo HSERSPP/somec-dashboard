@@ -1086,19 +1086,12 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
 
   let html = `<div class="section-title" style="margin-top:24px">🎯 Speedometer SPI — Per Cantiere e Soggetto</div>`;
 
-  // Stabilimento — mostra sempre se sito=ALL o sito=Stabilimento
+  // Stabilimento — media dei voti dei 9 reparti
   if (sitoFiltro==='ALL' || sitoFiltro==='Stabilimento Somec -- sede principale') {
-    const votoStab = (() => {
-      let a=[], sr=[], pr=[];
-      TRIMESTRI.forEach(q=>{
-        const d=DATA_TREND[q]; if(!d) return;
-        a=[...a,...d.audits.filter(x=>x.sito==='Stabilimento Somec -- sede principale')];
-        sr=[...sr,...d.safereports.filter(x=>x.sito==='Stabilimento Somec -- sede principale')];
-        pr=[...pr,...d.preposti.filter(x=>x.sito==='Stabilimento Somec -- sede principale')];
-      });
-      if(!a.length&&!sr.length&&!pr.length) return null;
-      return calcVoto(calcSPI(a,sr,pr));
-    })();
+    const votiReparti = REPARTI_CONFIG.map(r=>calcVotoReparto(r.id)).filter(v=>v!==null);
+    const votoStab = votiReparti.length
+      ? parseFloat((votiReparti.reduce((s,v)=>s+v,0)/votiReparti.length).toFixed(1))
+      : null;
     html += `<div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:#1a4a7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;border-bottom:2px solid #1a4a7a;padding-bottom:6px">🏭 Stabilimento Somec</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
