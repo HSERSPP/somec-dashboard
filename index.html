@@ -1088,14 +1088,25 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
 
   // Stabilimento — media dei voti dei 9 reparti
   if (sitoFiltro==='ALL' || sitoFiltro==='Stabilimento Somec -- sede principale') {
-    const votiReparti = REPARTI_CONFIG.map(r=>calcVotoReparto(r.id)).filter(v=>v!==null);
-    const votoStab = votiReparti.length
-      ? parseFloat((votiReparti.reduce((s,v)=>s+v,0)/votiReparti.length).toFixed(1))
+    const votiReparti = REPARTI_CONFIG.map(r=>({id:r.id,nome:r.nome,voto:calcVotoReparto(r.id)}));
+    const votiValidi = votiReparti.filter(r=>r.voto!==null);
+    const votoStab = votiValidi.length
+      ? parseFloat((votiValidi.reduce((s,r)=>s+r.voto,0)/votiValidi.length).toFixed(1))
       : null;
+    const dettaglio = votiReparti.map(r=>
+      `<span style="font-size:10px;color:${r.voto===null?'#bdc3c7':'#1a1e28'}">${r.id}:${r.voto??'N.E.'}</span>`
+    ).join(' &nbsp;|&nbsp; ');
     html += `<div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:#1a4a7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;border-bottom:2px solid #1a4a7a;padding-bottom:6px">🏭 Stabilimento Somec</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;font-weight:700;color:#1a4a7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;border-bottom:2px solid #1a4a7a;padding-bottom:6px">🏭 Stabilimento Somec — Media reparti</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start">
         <div>${drawSpeedSVG(votoStab??0,'Somec Stabilimento',votoStab===null)}</div>
+        <div style="padding:8px 0;font-size:11px;color:#7a8090">
+          <div style="margin-bottom:6px;font-weight:700;color:#1a4a7a">Voti per reparto:</div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            ${votiReparti.map(r=>`<div>${r.nome.split('—')[0].trim()}: <strong style="color:${r.voto===null?'#bdc3c7':getBanda(r.voto).color}">${r.voto??'N.E.'}</strong>${r.voto!==null?' /100':''}</div>`).join('')}
+          </div>
+          <div style="margin-top:8px;font-size:10px">Media su ${votiValidi.length}/${votiReparti.length} reparti con dati</div>
+        </div>
       </div>
     </div>`;
   }
