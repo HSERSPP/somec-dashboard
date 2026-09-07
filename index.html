@@ -200,6 +200,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
 <div class="tabs-bar">
   <div class="tabs-inner">
     <button class="tab-btn active" onclick="switchTab('spi')">📊 SPI Dashboard</button>
+    <button class="tab-btn" onclick="switchTab('speed')">🎯 Speedometer</button>
     <button class="tab-btn" onclick="switchTab('trend')">📈 Trend</button>
     <button class="tab-btn" onclick="switchTab('ac')">✅ Azioni Correttive</button>
     <button class="tab-btn" onclick="switchTab('qr')">📱 QR Code App</button>
@@ -253,6 +254,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-bg);color
   </div>
 
   <!-- TAB: TREND -->
+  <div id="tab-speed" class="tab-content">
+    <div id="speed-content" style="padding:4px 0"></div>
+  </div>
+
   <div id="tab-trend" class="tab-content">
     <div id="trend-content"><div class="loading"><div class="spinner"></div><div>Caricamento trend...</div></div></div>
   </div>
@@ -551,12 +556,13 @@ let chartTrend = null, chartNC = null;
 // ── TABS ──────────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['spi','trend','ac','qr'][i]===tab));
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['spi','speed','trend','ac','qr'][i]===tab));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
   document.getElementById('tab-'+tab).classList.add('active');
   if (tab==='qr') renderQR();
   if (tab==='trend') renderTrend();
   if (tab==='ac') renderAC();
+  if (tab==='speed') renderSpeedometerTab();
 }
 
 // ── INIT ──────────────────────────────────────────────────
@@ -836,13 +842,12 @@ function renderSPI(anno,trim,sito) {
   if(!evRec.length) html+='<tr><td colspan="5" style="text-align:center;color:var(--gray-mid)">Nessuna segnalazione.</td></tr>';
   else evRec.forEach(e=>{html+=`<tr><td><code style="font-size:10px">${e.id||'—'}</code></td><td>${tipoL[e.tipo]||e.tipo||'—'}</td><td>${(e.sito||'—').split(' ')[0]}</td><td>${(e.data_ora||'—').substring(0,10)}</td><td><span class="badge ${e.stato==='chiusa'?'ottimo':'insufficiente'}">${e.stato||'aperta'}</span></td></tr>`;});
   html+='</tbody></table></div>';
-  html+=`<div id="speedometer-section-spi"></div><div id="speedometer-reparti"></div>`;
+  
 
   document.getElementById('spi-content').innerHTML=html;
 
   // Renderizza speedometer dopo aver inserito l'HTML
-  renderSpeedometerInto('speedometer-section-spi', sito);
-  renderSpeedometerReparti();
+
 }
 
 // ── TREND ─────────────────────────────────────────────────
@@ -900,7 +905,7 @@ function renderTrend() {
       </tbody>
     </table>
     </div>
-    <div id="speedometer-section"></div><div id="speedometer-reparti-trend"></div>`;
+    `;
 
   // Distruggi chart esistenti
   if (chartTrend) chartTrend.destroy();
@@ -1031,19 +1036,85 @@ function drawSpeedSVG(voto, nome, isNE) {
   </svg>`;
 }
 
+function renderSpeedometerTab() {
+  const cont = document.getElementById('speed-content');
+  if (!cont) return;
+  const sito = document.getElementById('f-sito').value;
+  if (!DATA_TREND || !Object.keys(DATA_TREND).length) {
+    cont.innerHTML = '<div class="empty-state">Carica prima i dati selezionando anno e periodo.</div>';
+    return;
+  }
+  let html = '';
+
+  // ── STABILIMENTO + REPARTI ──
+  const votiReparti = REPARTI_CONFIG.map(r=>({id:r.id,nome:r.nome,voto:calcVotoReparto(r.id)}));
+  const votiValidi = votiReparti.filter(r=>r.voto!==null);
+  const votoStab = votiValidi.length
+    ? parseFloat((votiValidi.reduce((s,r)=>s+r.voto,0)/votiValidi.length).toFixed(1))
+    : null;
+
+  html += `<div class="section-title">🏭 Stabilimento Somec</div>
+  <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">
+      <div style="border-right:2px solid #f0f2f5;padding-right:12px;margin-right:4px">
+        <div>${drawSpeedSVG(votoStab??0,'Somec Stabilimento',votoStab===null)}</div>
+        <div style="font-size:10px;color:#7a8090;text-align:center;margin-top:4px">Media ${votiValidi.length}/${votiReparti.length} reparti</div>
+      </div>
+      ${votiReparti.map(r=>`<div>${drawSpeedSVG(r.voto??0,r.nome,r.voto===null)}</div>`).join('')}
+    </div>
+  </div>`;
+
+  // ── CANTIERI ──
+  const cantieriFiltrati = sito==='ALL' ? CANTIERI_CONFIG : CANTIERI_CONFIG.filter(c=>c.sito===sito);
+  cantieriFiltrati.forEach(c => {
+    const votoSomec = getVotoFn(c.sito, null);
+    const fornHtml = c.fornitori.map(f => {
+      const v = getVotoFn(c.sito, f);
+      return `<div>${drawSpeedSVG(v??0,f,v===null)}</div>`;
+    }).join('');
+    html += `<div class="section-title">🚢 ${c.nome}</div>
+    <div style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08);margin-bottom:16px">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">
+        <div style="border-right:2px solid #f0f2f5;padding-right:12px;margin-right:4px">
+          ${drawSpeedSVG(votoSomec??0,'Somec – '+c.nome,votoSomec===null)}
+        </div>
+        ${fornHtml}
+      </div>
+    </div>`;
+  });
+
+  cont.innerHTML = html;
+}
+
+function getVotoFn(sito, impresa) {
+  const anno2 = parseInt(document.getElementById('f-anno')?.value)||new Date().getFullYear();
+  const trim2 = document.getElementById('f-trim')?.value||'ANNO';
+  const isAnnoIntero = trim2==='ANNO'||trim2==='Anno';
+  if (DATA.spi_storico&&DATA.spi_storico.length) {
+    const match = DATA.spi_storico.filter(r=>{
+      const sitoOk=(r.sito||'').includes(sito.split('(')[0].trim());
+      const annoOk=r.anno===anno2;
+      const trimOk=isAnnoIntero||r.trimestre===trim2;
+      const impresaOk=impresa?(r.impresa||'').toLowerCase().includes(impresa.toLowerCase()):(r.impresa||'').toLowerCase().includes('somec');
+      return sitoOk&&annoOk&&trimOk&&impresaOk&&r.voto!==null;
+    });
+    if(match.length) return match[0].voto;
+  }
+  let auditsTot=[],srTot=[],prTot=[];
+  TRIMESTRI.forEach(q=>{
+    const d=DATA_TREND[q]; if(!d) return;
+    if(impresa) auditsTot=[...auditsTot,...d.audits.filter(a=>a.sito===sito&&(a.impresa||'').toLowerCase().includes(impresa.toLowerCase()))];
+    else auditsTot=[...auditsTot,...d.audits.filter(a=>a.sito===sito&&(a.impresa||'').toLowerCase().includes('somec'))];
+    srTot=[...srTot,...d.safereports.filter(s=>s.sito===sito)];
+    prTot=[...prTot,...d.preposti.filter(p=>p.sito===sito)];
+  });
+  const auditReali=auditsTot.filter(a=>a.fonte!=='pdf_import'&&a.fonte!=='excel_import');
+  if(auditReali.length) return calcVoto(calcSPI(auditReali,srTot,prTot));
+  return null;
+}
+
 function renderSpeedometer() {
   renderSpeedometerInto('speedometer-section', 'ALL');
-  // Render reparti nel trend
-  const secT = document.getElementById('speedometer-reparti-trend');
-  if(secT) {
-    // Crea elemento temporaneo, popola e copia
-    const tmp = document.createElement('div');
-    tmp.id = 'speedometer-reparti';
-    document.body.appendChild(tmp);
-    renderSpeedometerReparti();
-    secT.innerHTML = tmp.innerHTML;
-    document.body.removeChild(tmp);
-  }
 }
 
 function renderSpeedometerInto(targetId, sitoFiltro) {
