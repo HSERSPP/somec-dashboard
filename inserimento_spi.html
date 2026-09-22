@@ -141,7 +141,18 @@ const db = firebase.firestore();
 
 // ── STRUTTURA ─────────────────────────────────────────────
 const CANTIERI = {
-  'Stabilimento Somec -- sede principale': [{nome:'Somec – Stabilimento', key:'somec'}],
+  'Stabilimento Somec -- sede principale': [
+    {nome:'Somec – Stabilimento', key:'somec'},
+    {nome:'R1 — Uffici', key:'R1'},
+    {nome:'R3 — Lavorazione Alluminio', key:'R3'},
+    {nome:'R3.1 — Pianali', key:'R3.1'},
+    {nome:'R4 — Assemblaggio', key:'R4'},
+    {nome:'R5 — Magazzino', key:'R5'},
+    {nome:'R5.1 — Imballo', key:'R5.1'},
+    {nome:'R7 — Carpenteria', key:'R7'},
+    {nome:'R8 — Vetreria', key:'R8'},
+    {nome:'RE — Area Esterna', key:'RE'},
+  ],
   'Genova (Fincantieri)': [{nome:'Somec – Genova',key:'somec'},{nome:'Giemmeci',key:'Giemmeci'},{nome:'HB Montaggi',key:'HB Montaggi'},{nome:'Macris',key:'Macris'}],
   'Marghera (Fincantieri)': [{nome:'Somec – Marghera',key:'somec'},{nome:'Technik',key:'Technik'},{nome:'Solanord',key:'Solanord'}],
   'Monfalcone (Fincantieri)': [{nome:'Somec – Monfalcone',key:'somec'},{nome:'Sotrade',key:'Sotrade'},{nome:'PLG',key:'PLG'},{nome:'TSM',key:'TSM'},{nome:'EJ-ER',key:'EJ-ER'}],
@@ -396,15 +407,31 @@ async function eliminaDati() {
   if(!currentSoggetto){showToast('Seleziona un soggetto');return;}
   const nomeSoggetto = document.getElementById('form-title').textContent.replace('Indici SPI — ','');
   const trim=document.getElementById('f-trim').value;
-  const anno=document.getElementById('f-anno').value;
+  const anno=parseInt(document.getElementById('f-anno').value);
+  const sito=document.getElementById('f-cantiere').value;
   if(!confirm(`Eliminare l'inserimento manuale SPI di "${nomeSoggetto}" per ${trim} ${anno}?\n\nDopo l'eliminazione il voto per questo soggetto/reparto tornerà a calcolarsi automaticamente dai dati reali (audit, segnalazioni SafeReport, preposti) nella Dashboard.\n\nQuesta azione non è reversibile.`)) return;
-  const docId=docIdCorrente();
   try {
-    await db.collection('spi_manuale').doc(docId).delete();
+    // Cerca TUTTI i documenti spi_manuale che corrispondono a questo soggetto/periodo,
+    // qualunque sia l'ID con cui sono stati creati (anche se inseriti da fuori questo
+    // strumento, es. da un'importazione dati) — non ci si affida a un ID calcolato.
+    const snap = await db.collection('spi_manuale')
+      .where('anno','==',anno)
+      .where('trimestre','==',trim)
+      .where('sito','==',sito)
+      .get();
+    const daEliminare = snap.docs.filter(d=>{
+      const x = d.data();
+      return x.soggetto_key===currentSoggetto || x.reparto===currentSoggetto;
+    });
+    if(!daEliminare.length){
+      showToast('Nessun inserimento manuale trovato per questo soggetto/periodo');
+      return;
+    }
+    await Promise.all(daEliminare.map(d=>db.collection('spi_manuale').doc(d.id).delete()));
     delete savedData[currentSoggetto];
     delete formData[currentSoggetto];
-    document.getElementById('stato-salv').textContent=`🗑 Inserimento manuale eliminato ${new Date().toLocaleTimeString('it-IT')}`;
-    showToast('🗑 Inserimento manuale eliminato — ora il voto si ricalcola in automatico');
+    document.getElementById('stato-salv').textContent=`🗑 Eliminati ${daEliminare.length} record ${new Date().toLocaleTimeString('it-IT')}`;
+    showToast(`🗑 Eliminati ${daEliminare.length} inserimento/i manuale/i — ora il voto si ricalcola in automatico`);
     buildForm();
   } catch(e){ showToast('❌ Errore: '+e.message); }
 }
