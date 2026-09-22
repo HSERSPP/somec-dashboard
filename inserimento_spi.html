@@ -25,6 +25,7 @@ select:focus,input:focus{outline:none;border-color:#2563a8}
 .btn-blue{background:#1a4a7a;color:#fff}.btn-blue:hover{background:#2563a8}
 .btn-green{background:#1a7a4a;color:#fff}.btn-green:hover{background:#156038}
 .btn-gray{background:#e0e4ea;color:#1a1e28}
+.btn-red{background:#fdecea;color:#c0392b}.btn-red:hover{background:#f9ccc9}
 
 /* Soggetto selector */
 .soggetto-grid{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
@@ -98,6 +99,7 @@ select:focus,input:focus{outline:none;border-color:#2563a8}
       </div>
       <button class="btn btn-blue" onclick="caricaDati()">📂 Carica</button>
       <button class="btn btn-green" onclick="salvaDati()">💾 Salva</button>
+      <button class="btn btn-red" onclick="eliminaDati()">🗑 Elimina inserimento manuale</button>
     </div>
 
     <!-- Soggetti -->
@@ -162,11 +164,10 @@ const INDICI = [
      {id:'nm_gestiti',label:'N. gestiti con AC',type:'number',min:0,placeholder:'0'},
    ],
    formula: d => {
-     // =IF(D&&E blank): IF(C_infort>0,1,3) ELSE: IF(D blank/0,3, IF(E blank/0,2, IF(D>=3&&E>=D,5, IF(D>=1&&E>=D,4,3))))
      const ns = d.nm_segnalati, ng = d.nm_gestiti;
      const nsBlank = !isVal(ns)||+ns===0;
      const ngBlank = !isVal(ng)||+ng===0;
-     if(nsBlank && ngBlank) return 3; // nessun dato = neutro
+     if(nsBlank && ngBlank) return 3;
      if(nsBlank) return 3;
      if(ngBlank) return 2;
      if(+ns>=3 && +ng>=+ns) return 5;
@@ -199,10 +200,8 @@ const INDICI = [
      {id:'dpi_cn',label:'Conservazione 0-5',type:'number',min:0,max:5,step:1,placeholder:'3'},
    ],
    formula: d => {
-     // =IF(I&&J&&K TUTTI blank, 5, (I_or5+J_or5+K_or5)/3)
-     // Excel: se TUTTI blank->5; per singolo blank usa 5 nel calcolo media
      const utB=!isVal(d.dpi_ut), ctB=!isVal(d.dpi_ct), cnB=!isVal(d.dpi_cn);
-     if(utB && ctB && cnB) return 5; // tutti blank = 5
+     if(utB && ctB && cnB) return 5;
      const ut=utB?5:+d.dpi_ut;
      const ct=ctB?5:+d.dpi_ct;
      const cn=cnB?5:+d.dpi_cn;
@@ -257,10 +256,9 @@ const INDICI = [
      {id:'ac_totali',label:'AC totali (Q)',type:'number',min:0,placeholder:'0'},
    ],
    formula: d => {
-     // =IF(Q blank/0, 3, IF(P blank, 0, IF(P/Q>=1,5,>=0.8->4,>=0.6->3,>=0.4->2,>=0.2->1,else->0)))
      const tot=+d.ac_totali||0, ch=d.ac_chiuse;
-     if(!isVal(d.ac_totali)||tot===0) return 3; // neutro se nessuna AC aperta nel trimestre
-     if(!isVal(ch)) return 0; // totali presenti ma chiuse blank = 0
+     if(!isVal(d.ac_totali)||tot===0) return 3;
+     if(!isVal(ch)) return 0;
      const pct=+ch/tot;
      return pct>=1?5:pct>=0.8?4:pct>=0.6?3:pct>=0.4?2:pct>=0.2?1:0;
    }},
@@ -313,7 +311,7 @@ function aggiornaSoggetti() {
   const sogg = CANTIERI[sito]||[];
   const grid = document.getElementById('soggetti-grid');
   grid.innerHTML = sogg.map(s=>`
-    <button class="sogg-btn ${s.key==='somec'?'somec':''}" 
+    <button class="sogg-btn ${s.key==='somec'?'somec':''}"
       onclick="selezionaSoggetto('${s.key}','${s.nome}')">${s.nome}</button>
   `).join('');
   if(sogg.length) selezionaSoggetto(sogg[0].key, sogg[0].nome);
@@ -347,6 +345,13 @@ async function caricaDati() {
   } catch(e){ showToast('❌ Errore: '+e.message); }
 }
 
+function docIdCorrente() {
+  const anno=document.getElementById('f-anno').value;
+  const trim=document.getElementById('f-trim').value;
+  const sito=document.getElementById('f-cantiere').value;
+  return `SPIM-${anno}-${trim}-${sito.replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}-${currentSoggetto.replace(/[^a-zA-Z0-9]/g,'_')}`;
+}
+
 async function salvaDati() {
   const anno=parseInt(document.getElementById('f-anno').value);
   const trim=document.getElementById('f-trim').value;
@@ -365,7 +370,7 @@ async function salvaDati() {
     indiciData[ind.id]=campiData;
   });
 
-  const docId=`SPIM-${anno}-${trim}-${sito.replace(/[^a-zA-Z0-9]/g,'_').substring(0,25)}-${currentSoggetto.replace(/[^a-zA-Z0-9]/g,'_')}`;
+  const docId=docIdCorrente();
   try {
     const isReparto = ['R1','R3','R3.1','R4','R5','R5.1','R7','R8','RE'].includes(currentSoggetto);
     await db.collection('spi_manuale').doc(docId).set({
@@ -383,6 +388,23 @@ async function salvaDati() {
     modified=false;
     document.getElementById('stato-salv').textContent=`✅ Salvato ${new Date().toLocaleTimeString('it-IT')}`;
     showToast('✅ Dati salvati');
+    buildForm();
+  } catch(e){ showToast('❌ Errore: '+e.message); }
+}
+
+async function eliminaDati() {
+  if(!currentSoggetto){showToast('Seleziona un soggetto');return;}
+  const nomeSoggetto = document.getElementById('form-title').textContent.replace('Indici SPI — ','');
+  const trim=document.getElementById('f-trim').value;
+  const anno=document.getElementById('f-anno').value;
+  if(!confirm(`Eliminare l'inserimento manuale SPI di "${nomeSoggetto}" per ${trim} ${anno}?\n\nDopo l'eliminazione il voto per questo soggetto/reparto tornerà a calcolarsi automaticamente dai dati reali (audit, segnalazioni SafeReport, preposti) nella Dashboard.\n\nQuesta azione non è reversibile.`)) return;
+  const docId=docIdCorrente();
+  try {
+    await db.collection('spi_manuale').doc(docId).delete();
+    delete savedData[currentSoggetto];
+    delete formData[currentSoggetto];
+    document.getElementById('stato-salv').textContent=`🗑 Inserimento manuale eliminato ${new Date().toLocaleTimeString('it-IT')}`;
+    showToast('🗑 Inserimento manuale eliminato — ora il voto si ricalcola in automatico');
     buildForm();
   } catch(e){ showToast('❌ Errore: '+e.message); }
 }
