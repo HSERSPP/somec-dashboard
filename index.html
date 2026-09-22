@@ -380,7 +380,7 @@ const db = firebase.firestore();
 const SPI_CONFIG = [
   {id:'infortuni',   nome:'Infortuni (gg assenza)',      peso:18,max:5},
   {id:'nearmiss',    nome:'Near Miss',                   peso:13,max:5},
-  {id:'segnalazioni',nome:'Segnalazioni cantiere',       peso:13,max:5},
+  {id:'segnalazioni',nome:'Segnalazioni HSE',            peso:13,max:5},
   {id:'procedure',   nome:'Procedure sicurezza',         peso:7, max:5},
   {id:'dpi',         nome:'DPI utilizzo/controllo',      peso:11,max:5},
   {id:'ispezioni',   nome:'Giorni di ispezione',         peso:13,max:5},
@@ -444,6 +444,25 @@ const AREA_TO_REPARTO = {
   'SR-RSPP-20260807-01': 'R3',
 };
 
+// ── ALIAS SITO (normalizzazione tra app diverse) ─────────
+// L'app SafeReport (MS452) salva il campo "sito" con stringhe diverse da
+// quelle canoniche usate in questa dashboard: es. "Monfalcone" invece di
+// "Monfalcone (Fincantieri)", "Stabilimento / Produzione Somec" invece di
+// "Stabilimento Somec -- sede principale". Senza normalizzazione, il filtro
+// Firestore (where('sito','==',...)) esclude silenziosamente queste
+// segnalazioni ogni volta che si seleziona un sito specifico nel filtro.
+const SITO_ALIASES = {
+  'Genova (Fincantieri)':                      ['Genova (Fincantieri)', 'Genova'],
+  'Marghera (Fincantieri)':                    ['Marghera (Fincantieri)', 'Marghera'],
+  'Monfalcone (Fincantieri)':                  ['Monfalcone (Fincantieri)', 'Monfalcone'],
+  'Turku (Meyer)':                             ['Turku (Meyer)', 'Turku'],
+  "Saint-Nazaire (Chantiers de l'Atlantique)": ["Saint-Nazaire (Chantiers de l'Atlantique)", 'Saint-Nazaire'],
+  'Papenburg (Meyer Werft)':                   ['Papenburg (Meyer Werft)', 'Papenburg'],
+  'Stabilimento Somec -- sede principale':     ['Stabilimento Somec -- sede principale', 'Stabilimento / Produzione Somec'],
+};
+function sitoAliases(sitoCanonico) { return SITO_ALIASES[sitoCanonico] || [sitoCanonico]; }
+function isStessoSito(sitoRecord, sitoCanonico) { return sitoAliases(sitoCanonico).includes(sitoRecord); }
+
 const REPARTI_CONFIG = [
   {id:'R1',   nome:'R1 — Uffici'},
   {id:'R3',   nome:'R3 — Lavorazione Alluminio'},
@@ -482,22 +501,22 @@ function calcVotoReparto(reparto) {
   // automatico, così un voto manuale non può restare "congelato" e ignorare
   // segnalazioni/eventi successivi come accaduto in precedenza.
   const auditR = DATA.audits.filter(a =>
-    a.sito === 'Stabilimento Somec -- sede principale' &&
+    isStessoSito(a.sito, 'Stabilimento Somec -- sede principale') &&
     a.reparto === reparto &&
     a.fonte !== 'pdf_import' && a.fonte !== 'excel_import'
   );
   const srAll = DATA.safereports_all || DATA.safereports;
   const srR = srAll.filter(s =>
-    s.sito === 'Stabilimento Somec -- sede principale' &&
+    isStessoSito(s.sito, 'Stabilimento Somec -- sede principale') &&
     getRepartoPerSR(s) === reparto
   );
   const prR = DATA.preposti.filter(p =>
-    p.sito === 'Stabilimento Somec -- sede principale' &&
+    isStessoSito(p.sito, 'Stabilimento Somec -- sede principale') &&
     (p.ramo === reparto || p.reparto === reparto)
   );
   const manuale = (DATA.spi_manuale||[]).filter(r =>
     r.reparto===reparto &&
-    r.sito==='Stabilimento Somec -- sede principale' &&
+    isStessoSito(r.sito, 'Stabilimento Somec -- sede principale') &&
     r.anno===anno &&
     (isAnnoIntero || r.trimestre===trim)
   );
@@ -603,15 +622,18 @@ async function loadData() {
       qS = qS.where('trimestre','==',trim);
       qP = qP.where('trimestre','==',trim);
     }
-    if (sito!=='ALL'){qA=qA.where('sito','==',sito);qS=qS.where('sito','==',sito);qP=qP.where('sito','==',sito);}
+    if (sito!=='ALL'){
+      const aliasesSito = sitoAliases(sito);
+      qA=qA.where('sito','in',aliasesSito);qS=qS.where('sito','in',aliasesSito);qP=qP.where('sito','in',aliasesSito);
+    }
 
     // Le segnalazioni HSE le carichiamo SEMPRE per tutto l'anno (multi-trimestre)
     // cosi nel tab AC si vedono tutte le aperte indipendentemente dal periodo
     let qSAll = db.collection('safereport').where('anno','==',anno);
-    if (sito!=='ALL') qSAll = qSAll.where('sito','==',sito);
+    if (sito!=='ALL') qSAll = qSAll.where('sito','in',sitoAliases(sito));
     // Includi anche anno precedente per segnalazioni aperte da Q4 2025
     let qSPrev = db.collection('safereport').where('anno','==',anno-1);
-    if (sito!=='ALL') qSPrev = qSPrev.where('sito','==',sito);
+    if (sito!=='ALL') qSPrev = qSPrev.where('sito','in',sitoAliases(sito));
 
     const [ra,rs,rp,rSAll,rSPrev,rSpiSto,rOre,rSpiMan] = await Promise.all([
       qA.get(),qS.get(),qP.get(),qSAll.get(),qSPrev.get(),
@@ -649,7 +671,10 @@ async function loadTrendData(anno, sito) {
     let qA = db.collection('audit_hse').where('anno','==',anno).where('trimestre','==',trim);
     let qS = db.collection('safereport').where('anno','==',anno).where('trimestre','==',trim);
     let qP = db.collection('preposti').where('anno','==',anno).where('trimestre','==',trim);
-    if (sito!=='ALL'){qA=qA.where('sito','==',sito);qS=qS.where('sito','==',sito);qP=qP.where('sito','==',sito);}
+    if (sito!=='ALL'){
+      const aliasesSito = sitoAliases(sito);
+      qA=qA.where('sito','in',aliasesSito);qS=qS.where('sito','in',aliasesSito);qP=qP.where('sito','in',aliasesSito);
+    }
     const [ra,rs,rp] = await Promise.all([qA.get(),qS.get(),qP.get()]);
     DATA_TREND[trim] = {
       audits:     ra.docs.map(d=>d.data()),
@@ -1101,15 +1126,15 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
       const d = DATA_TREND[q]; if (!d) return;
       if (impresa) {
         auditsTot = [...auditsTot, ...d.audits.filter(a =>
-          a.sito===sito && (a.impresa||'').toLowerCase().includes(impresa.toLowerCase())
+          isStessoSito(a.sito, sito) && (a.impresa||'').toLowerCase().includes(impresa.toLowerCase())
         )];
       } else {
         auditsTot = [...auditsTot, ...d.audits.filter(a =>
-          a.sito===sito && (a.impresa||'').toLowerCase().includes('somec')
+          isStessoSito(a.sito, sito) && (a.impresa||'').toLowerCase().includes('somec')
         )];
       }
-      srTot = [...srTot, ...d.safereports.filter(s=>s.sito===sito)];
-      prTot = [...prTot, ...d.preposti.filter(p=>p.sito===sito)];
+      srTot = [...srTot, ...d.safereports.filter(s=>isStessoSito(s.sito, sito))];
+      prTot = [...prTot, ...d.preposti.filter(p=>isStessoSito(p.sito, sito))];
     });
 
     // Usa solo audit reali (non import) per il ricalcolo
