@@ -476,29 +476,11 @@ function calcVotoReparto(reparto) {
   const trim = document.getElementById('f-trim')?.value || 'ANNO';
   const isAnnoIntero = trim==='ANNO'||trim==='Anno';
 
-  // PRIORITA 1: spi_manuale inserito dall'RSPP per questo reparto
-  const manuale = (DATA.spi_manuale||[]).filter(r =>
-    r.reparto===reparto &&
-    r.sito==='Stabilimento Somec -- sede principale' &&
-    r.anno===anno &&
-    (isAnnoIntero || r.trimestre===trim)
-  );
-  if (manuale.length) {
-    // Calcola voto dagli indici manuali
-    let somaPesi=0, somaScore=0;
-    const ind = manuale[0].indici||{};
-    const PESI = {infortuni:18,nearmiss:13,segnalazioni:13,procedure:7,dpi:11,
-                  ispezioni:13,ore:13,unsafe:9,ac_chiusura:8,conformita:6,formazione:5};
-    Object.entries(ind).forEach(([k,v])=>{
-      if(v && v._score!==undefined && PESI[k]) {
-        somaScore += v._score * PESI[k];
-        somaPesi  += PESI[k];
-      }
-    });
-    if(somaPesi>0) return parseFloat((somaScore/somaPesi*20).toFixed(1));
-  }
-
-  // PRIORITA 2: audit reali + segnalazioni per reparto
+  // FONTE PRIMARIA SEMPRE: dati reali (audit + segnalazioni SafeReport + preposti).
+  // L'inserimento manuale (spi_manuale) non sovrascrive più un indice già alimentato
+  // da dati reali — interviene SOLO sugli indici per cui non esiste alcun dato
+  // automatico, così un voto manuale non può restare "congelato" e ignorare
+  // segnalazioni/eventi successivi come accaduto in precedenza.
   const auditR = DATA.audits.filter(a =>
     a.sito === 'Stabilimento Somec -- sede principale' &&
     a.reparto === reparto &&
@@ -513,12 +495,20 @@ function calcVotoReparto(reparto) {
     p.sito === 'Stabilimento Somec -- sede principale' &&
     (p.ramo === reparto || p.reparto === reparto)
   );
+  const manuale = (DATA.spi_manuale||[]).filter(r =>
+    r.reparto===reparto &&
+    r.sito==='Stabilimento Somec -- sede principale' &&
+    r.anno===anno &&
+    (isAnnoIntero || r.trimestre===trim)
+  );
 
-  if (!auditR.length && !srR.length && !prR.length) return null;
+  if (!auditR.length && !srR.length && !prR.length && !manuale.length) return null;
 
-  // Calcola SPI con dati disponibili — opzione A:
-  // usa solo gli indici per cui ho dati reali, evita falsi neutri
-  const scores = calcSPI(auditR, srR, prR);
+  // Calcola SPI con dati disponibili — usa solo gli indici per cui ho dati reali,
+  // evita falsi neutri. repartoContext:true attiva la correzione "assenza di
+  // segnalazioni" (vedi calcSPI): senza audit che la confermino, l'assenza di
+  // segnalazioni non vale più automaticamente punteggio massimo.
+  const scores = calcSPI(auditR, srR, prR, {repartoContext:true});
 
   // Forza null per indici senza dati reali se non ho audit
   if(!auditR.length) {
@@ -531,6 +521,19 @@ function calcVotoReparto(reparto) {
     scores.formazione  = null;
     scores.ore         = null;
   }
+
+  // Integrazione manuale — SOLO per riempire gli indici rimasti privi di un
+  // dato automatico (mai per sostituire un indice già calcolato dai dati reali).
+  if (manuale.length) {
+    const ind = manuale[0].indici||{};
+    Object.entries(ind).forEach(([k,v])=>{
+      if ((scores[k]===null || scores[k]===undefined) && v && v._score!==undefined) {
+        scores[k] = v._score;
+      }
+    });
+  }
+
+  if (Object.values(scores).every(v=>v===null||v===undefined)) return null;
 
   return calcVoto(scores);
 }
@@ -658,7 +661,8 @@ async function loadTrendData(anno, sito) {
 }
 
 // ── CALCOLO SPI ───────────────────────────────────────────
-function calcSPI(a,sr,pr) {
+function calcSPI(a,sr,pr,opts) {
+  opts = opts || {};
   const scores = {};
   const infortuni = sr.filter(s=>s.tipo==='infortunio');
   const ggAssenza = infortuni.reduce((s,x)=>s+(x.giorni_prognosi||0),0);
@@ -678,7 +682,17 @@ function calcSPI(a,sr,pr) {
 
   const segn = sr.filter(s=>s.tipo==='situazione_pericolosa'||s.tipo==='osservazione');
   const recidive = sr.filter(s=>s.stato==='aperta'&&s.tipo==='near_miss').length;
-  scores.segnalazioni = Math.max(0,(segn.length===0?5:segn.length<=2?4:segn.length<=5?3:segn.length<=8?2:1)-recidive);
+  if (opts.repartoContext && segn.length===0 && a.length===0) {
+    // Reparto stabilimento, zero segnalazioni E nessun audit/ispezione che lo confermi:
+    // non è possibile distinguere "reparto sicuro" da "reparto mai controllato",
+    // quindi l'indice non viene premiato al massimo — resta N.E. (non esaminato).
+    // Questa correzione vale SOLO per l'indice Segnalazioni a livello di reparto
+    // stabilimento: la metodologia ufficiale "0 osservazioni = 5" per Unsafe
+    // Acts/Conditions a livello cantiere/fornitore (Nota Metodologica SPI §5) resta invariata.
+    scores.segnalazioni = null;
+  } else {
+    scores.segnalazioni = Math.max(0,(segn.length===0?5:segn.length<=2?4:segn.length<=5?3:segn.length<=8?2:1)-recidive);
+  }
 
   const interviste = a.flatMap(x=>x.interviste||[]);
   if(!interviste.length){scores.procedure=null;}
