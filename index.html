@@ -458,7 +458,7 @@ const SITO_ALIASES = {
   'Turku (Meyer)':                             ['Turku (Meyer)', 'Turku'],
   "Saint-Nazaire (Chantiers de l'Atlantique)": ["Saint-Nazaire (Chantiers de l'Atlantique)", 'Saint-Nazaire'],
   'Papenburg (Meyer Werft)':                   ['Papenburg (Meyer Werft)', 'Papenburg'],
-  'Stabilimento Somec -- sede principale':     ['Stabilimento Somec -- sede principale', 'Stabilimento / Produzione Somec'],
+  'Stabilimento Somec -- sede principale':     ['Stabilimento Somec -- sede principale', 'Stabilimento Somec — sede principale', 'Stabilimento / Produzione Somec'],
 };
 function sitoAliases(sitoCanonico) { return SITO_ALIASES[sitoCanonico] || [sitoCanonico]; }
 function isStessoSito(sitoRecord, sitoCanonico) { return sitoAliases(sitoCanonico).includes(sitoRecord); }
@@ -685,8 +685,24 @@ async function loadTrendData(anno, sito) {
   await Promise.all(promises);
 }
 
+// ── AUDIT DI TERZA PARTE (es. Euroiso) ─────────────────────
+// Ogni audit ha "origine" (interna | terza_parte; assente = interna) e ogni NC/OBS ha
+// "natura" (operativa | tecnica | ambientale). Regole SPI:
+//  - DPI, Ispezioni, Conformita documentale: solo audit interni
+//  - Unsafe Acts/Conditions: audit interni + rilievi OPERATIVI di terza parte,
+//    con denominatore = aree verificate dall'audit di terza parte
+//  - Chiusura AC: tutte le NC (interne e di terza parte)
+//  - Rilievi ambientali: mai nello SPI sicurezza
+const UNSAFE_INCLUDE_TERZA_PARTE = true;  // false = Unsafe solo da audit interni
+const isTerzaParte = x => x.origine === 'terza_parte';
+function cntOperativi(x) {
+  return [...(x.nc_list||[]), ...(x.obs_list||[])].filter(i => i.natura === 'operativa').length;
+}
+
 // ── CALCOLO SPI ───────────────────────────────────────────
-function calcSPI(a,sr,pr,opts) {
+function calcSPI(aAll,sr,pr,opts) {
+  const a = aAll.filter(x => !isTerzaParte(x));   // audit interni
+  const aTP = aAll.filter(isTerzaParte);           // audit di terza parte
   opts = opts || {};
   const scores = {};
   const infortuni = sr.filter(s=>s.tipo==='infortunio');
@@ -746,12 +762,18 @@ function calcSPI(a,sr,pr,opts) {
   else if (totOre>10000) scores.ore = 1;
   else scores.ore = 0.5;
 
-  if(a.length===0){scores.unsafe=null;}
-  else{const tot=a.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0);const ratio=tot/a.length;scores.unsafe=ratio===0?5:ratio<=1?4:ratio<=2?3:ratio<=3?2:ratio<=5?1:0;}
+  {
+    let tot = a.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0);
+    let den = a.length;
+    if (UNSAFE_INCLUDE_TERZA_PARTE) aTP.forEach(x => { tot += cntOperativi(x); den += (x.aree_verificate||1); });
+    if (den===0) { scores.unsafe=null; }
+    else { const ratio=tot/den; scores.unsafe=ratio===0?5:ratio<=1?4:ratio<=2?3:ratio<=3?2:ratio<=5?1:0; }
+  }
 
   // CHIUSURA AC — formula Excel cella AC: totali=0→3 (neutro), chiuse blank→0
-  const acAp=a.reduce((s,x)=>s+(x.ac_aperte||0),0);
-  const acCh=a.reduce((s,x)=>s+(x.ac_chiuse||0),0);
+  // Include le NC di terza parte (registro AC unico)
+  const acAp=aAll.reduce((s,x)=>s+(x.ac_aperte||0),0);
+  const acCh=aAll.reduce((s,x)=>s+(x.ac_chiuse||0),0);
   if(acAp===0) { scores.ac_chiusura = 3; } // neutro se nessuna AC aperta
   else {
     const pct = acCh/acAp;
@@ -1204,6 +1226,22 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
 }
 
 
+let AC_FILTRO = {origine:'ALL', natura:'ALL'};
+const NATURA_LBL = {operativa:'Operativa', tecnica:'Tecnica', ambientale:'Ambientale'};
+function acPass(x) {
+  if (AC_FILTRO.origine!=='ALL' && (x.origine||'interna')!==AC_FILTRO.origine) return false;
+  if (AC_FILTRO.natura!=='ALL' && (x.natura||'')!==AC_FILTRO.natura) return false;
+  return true;
+}
+function setAcFiltro(k,v) { AC_FILTRO[k]=v; renderAC(); }
+function tagFonte(x) {
+  let t = '';
+  if (x.origine==='terza_parte') t += `<span class="badge" style="background:#ede7f6;color:#5e35b1">3ª parte${x.ente_terzo?' · '+x.ente_terzo:''}</span> `;
+  if (x.ricorrente) t += `<span class="badge" style="background:#fff3e0;color:#e65100">Ricorrente</span> `;
+  if (x.natura) t += `<span class="badge nd">${NATURA_LBL[x.natura]||x.natura}</span>`;
+  return t ? `<br>${t}` : '';
+}
+
 function renderAC() {
   const cont = document.getElementById('ac-content');
   const oggi = new Date().toISOString().slice(0,10);
@@ -1211,25 +1249,30 @@ function renderAC() {
   // Raccogli NC aperte
   const ncAperte = DATA.audits.flatMap(a => (a.nc_list||[])
     .filter(nc=>nc.stato_ac!=='chiusa')
-    .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
-  );
+    .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa, origine:a.origine||'interna', ente_terzo:a.ente_terzo||''}))
+  ).filter(acPass);
 
   // Raccogli NC chiuse
   const ncChiuse = DATA.audits.flatMap(a => (a.nc_list||[])
     .filter(nc=>nc.stato_ac==='chiusa')
-    .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
-  ).sort((a,b)=>(b.data_chiusura||'').localeCompare(a.data_chiusura||''));
+    .map(nc=>({...nc, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa, origine:a.origine||'interna', ente_terzo:a.ente_terzo||''}))
+  ).filter(acPass).sort((a,b)=>(b.data_chiusura||'').localeCompare(a.data_chiusura||''));
 
   // Raccogli OBS
   const obsAll = DATA.audits.flatMap(a => (a.obs_list||[])
     .filter(obs=>obs.stato_obs!=='risolto'&&obs.stato_obs!=='escalato')
-    .map(obs=>({...obs, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
-  );
+    .map(obs=>({...obs, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa, origine:a.origine||'interna', ente_terzo:a.ente_terzo||''}))
+  ).filter(acPass);
 
   const lvLabel = lv => lv===3?'<span class="badge gravemente">Lv.3 Elevato</span>':lv===2?'<span class="badge insufficiente">Lv.2 Medio</span>':'<span class="badge discreto">Lv.1 Minore</span>';
   const obsLvLabel = lv => lv===3?'<span class="badge gravemente">Alta</span>':lv===2?'<span class="badge discreto">Media</span>':'<span class="badge nd">Bassa</span>';
 
-  let html = '';
+  const selF = (k, opts) => `<select class="filter-select" onchange="setAcFiltro('${k}',this.value)">${opts.map(([v,l])=>`<option value="${v}" ${AC_FILTRO[k]===v?'selected':''}>${l}</option>`).join('')}</select>`;
+  let html = `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:#fff;border-radius:8px;padding:10px 14px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:14px">
+    <div class="filter-group"><span class="filter-label" style="color:var(--text)">Fonte</span>${selF('origine',[['ALL','Tutte'],['interna','Interna'],['terza_parte','Terza parte']])}</div>
+    <div class="filter-group"><span class="filter-label" style="color:var(--text)">Natura</span>${selF('natura',[['ALL','Tutte'],['operativa','Operativa'],['tecnica','Tecnica'],['ambientale','Ambientale']])}</div>
+    <span style="font-size:11px;color:var(--gray-mid)">Il filtro si applica a NC e OBS (non alle segnalazioni)</span>
+  </div>`;
 
   // ── SEZIONE 1: NC APERTE ──
   html += `<div class="section-title">⚠️ NC Aperte — Azioni Correttive (${ncAperte.length})</div>
@@ -1245,7 +1288,7 @@ function renderAC() {
       html += `<tr>
         <td>${(nc.sito||'—').split(' ')[0]}</td>
         <td>${nc.impresa||'—'}</td>
-        <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
+        <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span>${tagFonte(nc)}</td>
         <td>${nc.livello?lvLabel(nc.livello):'—'}</td>
         <td style="${scadStyle}">${scad}</td>
         <td>
@@ -1253,7 +1296,7 @@ function renderAC() {
             <button class="btn-view" onclick="viewRecord('nc','${nc.voce_id}')">👁</button>
             <button class="btn-edit" onclick="editRecord('nc','${nc.voce_id}')">✏️</button>
             <button class="btn-del" onclick="deleteRecord('nc','${nc.voce_id}')">🗑</button>
-            <button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'")}')">Chiudi AC</button>
+            <button class="btn-chiudi" onclick="apriModalAC('${nc.auditId}',${i},'${(nc.voce_testo||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">Chiudi AC</button>
           </div>
         </td>
       </tr>`;
@@ -1273,7 +1316,7 @@ function renderAC() {
       html += `<tr>
         <td>${(obs.sito||'—').split(' ')[0]}</td>
         <td>${obs.impresa||'—'}</td>
-        <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${obs.sezione||''}</span></td>
+        <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${obs.sezione||''}</span>${tagFonte(obs)}</td>
         <td>${obs.priorita?obsLvLabel(obs.priorita):'—'}</td>
         <td>${obs.data_audit||'—'}</td>
         <td>
@@ -1281,8 +1324,8 @@ function renderAC() {
             <button class="btn-view" onclick="viewRecord('obs','${obs.voce_id}')">👁</button>
             <button class="btn-edit" onclick="editRecord('obs','${obs.voce_id}')">✏️</button>
             <button class="btn-del" onclick="deleteRecord('obs','${obs.voce_id}')">🗑</button>
-            <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','risolto')">✅</button>
-            <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'")}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'")}','elevato')">⬆</button>
+            <button class="btn-chiudi" style="background:#27ae60;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','risolto')">✅</button>
+            <button class="btn-chiudi" style="background:#e74c3c;font-size:10px;padding:3px 7px" onclick="apriModalOBS('${obs.auditId}','${(obs.voce_id||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${(obs.voce_testo||obs.nota||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','elevato')">⬆</button>
           </div>
         </td>
       </tr>`;
@@ -1302,7 +1345,7 @@ function renderAC() {
       html += `<tr>
         <td>${(nc.sito||'—').split(' ')[0]}</td>
         <td>${nc.impresa||'—'}</td>
-        <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span></td>
+        <td style="font-size:11px">${nc.voce_testo||nc.voce_id||'—'}<br><span style="color:var(--gray-mid);font-size:10px">${nc.sezione||''}</span>${tagFonte(nc)}</td>
         <td>${nc.livello?lvLabel(nc.livello):'—'}</td>
         <td style="color:var(--green);font-weight:700">${nc.data_chiusura||'—'}</td>
         <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${nc.nota_chiusura||'—'}</td>
@@ -1319,8 +1362,8 @@ function renderAC() {
   // ── SEZIONE 4: STORICO OBS RISOLTE/ELEVATE ──
   const obsStorico = DATA.audits.flatMap(a => (a.obs_list||[])
     .filter(obs=>obs.stato_obs==='risolto'||obs.stato_obs==='elevato')
-    .map(obs=>({...obs, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa}))
-  ).sort((a,b)=>(b.data_aggiornamento||'').localeCompare(a.data_aggiornamento||''));
+    .map(obs=>({...obs, auditId:a._id, sito:a.sito, data_audit:a.data_audit, impresa:a.impresa, origine:a.origine||'interna', ente_terzo:a.ente_terzo||''}))
+  ).filter(acPass).sort((a,b)=>(b.data_aggiornamento||'').localeCompare(a.data_aggiornamento||''));
 
   html += `<div class="section-title" style="margin-top:20px">📋 Storico OBS Chiuse/Elevate (${obsStorico.length})</div>
   <div class="table-card"><table class="data-table">
@@ -1336,7 +1379,7 @@ function renderAC() {
       html += `<tr>
         <td>${(obs.sito||'—').split(' ')[0]}</td>
         <td>${obs.impresa||'—'}</td>
-        <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}</td>
+        <td style="font-size:11px">${obs.voce_testo||obs.nota||obs.voce_id||'—'}${tagFonte(obs)}</td>
         <td>${obs.priorita?obsLvLabel(obs.priorita):'—'}</td>
         <td>${esitoLabel}</td>
         <td>${obs.data_aggiornamento||'—'}</td>
@@ -1535,13 +1578,13 @@ function findRecord(tipo, id) {
   if (tipo==='nc'||tipo==='nc_chiusa') {
     for (const a of DATA.audits) {
       const nc = (a.nc_list||[]).find(x=>x.voce_id===id);
-      if (nc) return {...nc, auditId:a._id, sito:a.sito, impresa:a.impresa, data_audit:a.data_audit};
+      if (nc) return {...nc, auditId:a._id, sito:a.sito, impresa:a.impresa, data_audit:a.data_audit, origine:a.origine||'interna', ente_terzo:a.ente_terzo||'', rif_verbale:a.rif_verbale||''};
     }
   }
   if (tipo==='obs'||tipo==='obs_storico') {
     for (const a of DATA.audits) {
       const obs = (a.obs_list||[]).find(x=>x.voce_id===id);
-      if (obs) return {...obs, auditId:a._id, sito:a.sito, impresa:a.impresa, data_audit:a.data_audit};
+      if (obs) return {...obs, auditId:a._id, sito:a.sito, impresa:a.impresa, data_audit:a.data_audit, origine:a.origine||'interna', ente_terzo:a.ente_terzo||'', rif_verbale:a.rif_verbale||''};
     }
   }
   if (tipo==='segn_aperta'||tipo==='segn_chiusa') {
@@ -1573,6 +1616,11 @@ function fldFull(label, val) {
   return `<div class="detail-item full"><label>${label}</label><span style="line-height:1.5">${val||'—'}</span></div>`;
 }
 
+function fonteTxt(r) {
+  if (r.origine!=='terza_parte') return 'Interna';
+  return 'Terza parte' + (r.ente_terzo?' — '+r.ente_terzo:'') + (r.rif_verbale?' (verb. '+r.rif_verbale+')':'');
+}
+
 function buildViewHTML(tipo, r) {
   if (tipo==='nc'||tipo==='nc_chiusa') {
     const lvMap={1:'Lv.1 Minore',2:'Lv.2 Medio',3:'Lv.3 Elevato'};
@@ -1581,7 +1629,9 @@ function buildViewHTML(tipo, r) {
       ${fld('Data audit',r.data_audit)} ${fld('Sezione',r.sezione)}
       ${fld('Livello NC',lvMap[r.livello]||'—')} ${fld('Scadenza AC',r.scadenza||'—')}
       ${fld('Stato AC',r.stato_ac||'aperta')} ${fld('Data chiusura',r.data_chiusura||'—')}
+      ${fld('Fonte',fonteTxt(r))} ${fld('Natura',NATURA_LBL[r.natura]||'—')}
       ${fldFull('Testo NC',r.voce_testo)}
+      ${r.suggerimento?fldFull('Suggerimento auditor',r.suggerimento):''}
       ${fldFull('Nota preposto',r.nota)}
       ${fldFull('Nota chiusura',r.nota_chiusura)}
     </div>`;
@@ -1592,8 +1642,10 @@ function buildViewHTML(tipo, r) {
       ${fld('Sito',r.sito)} ${fld('Impresa',r.impresa)}
       ${fld('Data audit',r.data_audit)} ${fld('Sezione',r.sezione)}
       ${fld('Priorita',prMap[r.priorita]||'—')} ${fld('Stato',r.stato_obs||'in monitoraggio')}
-      ${fld('Data aggiornamento',r.data_aggiornamento||'—')}
+      ${fld('Data aggiornamento',r.data_aggiornamento||'—')} ${fld('Fonte',fonteTxt(r))}
+      ${fld('Natura',NATURA_LBL[r.natura]||'—')} ${fld('Ricorrente',r.ricorrente?'Sì':'No')}
       ${fldFull('Testo OBS',r.voce_testo||r.nota)}
+      ${r.suggerimento?fldFull('Suggerimento auditor',r.suggerimento):''}
       ${fldFull('Motivazione',r.nota_gestione)}
     </div>`;
   }
@@ -1633,6 +1685,7 @@ function buildEditHTML(tipo, r) {
       ${ef('Scadenza AC','scadenza',r.scadenza,'date')}
       ${es('Stato AC','stato_ac',r.stato_ac||'aperta',[{v:'aperta',l:'Aperta'},{v:'chiusa',l:'Chiusa'}])}
       ${ef('Data chiusura','data_chiusura',r.data_chiusura,'date')}
+      ${es('Natura','natura',r.natura||'',[{v:'',l:'— non classificata —'},{v:'operativa',l:'Operativa'},{v:'tecnica',l:'Tecnica'},{v:'ambientale',l:'Ambientale'}])}
       <div class="detail-item full">
         <label>Note aggiornamento (il testo precedente è precompilato — aggiungi dopo la data)</label>
         <textarea class="edit-field" id="ef-nota" rows="5" style="font-family:monospace;font-size:11px">${notaAttuale}</textarea>
@@ -1654,6 +1707,7 @@ function buildEditHTML(tipo, r) {
       ${es('Priorita','priorita',r.priorita?.toString(),[{v:'1',l:'Bassa'},{v:'2',l:'Media'},{v:'3',l:'Alta'}])}
       ${es('Stato OBS','stato_obs',r.stato_obs||'in_monitoraggio',[{v:'in_monitoraggio',l:'In monitoraggio'},{v:'risolto',l:'Risolto'},{v:'elevato',l:'Elevato a NC'}])}
       ${ef('Data aggiornamento','data_aggiornamento',r.data_aggiornamento,'date')}
+      ${es('Natura','natura',r.natura||'',[{v:'',l:'— non classificata —'},{v:'operativa',l:'Operativa'},{v:'tecnica',l:'Tecnica'},{v:'ambientale',l:'Ambientale'}])}
       <div class="detail-item full">
         <label>Note aggiornamento (il testo precedente è precompilato — aggiungi dopo la data)</label>
         <textarea class="edit-field" id="ef-nota_gestione" rows="5" style="font-family:monospace;font-size:11px">${notaAttuale}</textarea>
@@ -1676,11 +1730,11 @@ function readEditForm(tipo) {
   if (tipo==='nc'||tipo==='nc_chiusa') {
     return {livello:parseInt(g('livello')), scadenza:g('scadenza')||null,
       stato_ac:g('stato_ac'), data_chiusura:g('data_chiusura')||null,
-      nota:g('nota'), nota_chiusura:g('nota_chiusura')};
+      nota:g('nota'), nota_chiusura:g('nota_chiusura'), natura:g('natura')||null};
   }
   if (tipo==='obs'||tipo==='obs_storico') {
     return {priorita:parseInt(g('priorita')), stato_obs:g('stato_obs'),
-      data_aggiornamento:g('data_aggiornamento')||null, nota_gestione:g('nota_gestione')};
+      data_aggiornamento:g('data_aggiornamento')||null, nota_gestione:g('nota_gestione'), natura:g('natura')||null};
   }
   return {stato:g('stato'), scadenza:g('scadenza')||null,
     data_chiusura:g('data_chiusura')||null, destinatario:g('destinatario'),
@@ -1773,8 +1827,9 @@ async function confirmGestioneOBS() {
     await auditRef.update({obs_list: obsList});
     const label = pendingOBS.stato === 'risolto' ? 'RISOLTA' : 'ELEVATA A NC';
     showToast(`✅ OBS segnata come ${label}`);
+    const auditIdObs = pendingOBS.auditId;   // closeModalOBS() azzera pendingOBS
     closeModalOBS();
-    const auditLocal = DATA.audits.find(a=>a._id===pendingOBS.auditId);
+    const auditLocal = DATA.audits.find(a=>a._id===auditIdObs);
     if (auditLocal) auditLocal.obs_list = obsList;
     renderAC();
   } catch(e) { showToast('❌ Errore: '+e.message); }
@@ -1812,9 +1867,10 @@ async function confirmChiusuraAC() {
 
     await auditRef.update({nc_list:ncList, ac_chiuse:acChiuse});
     showToast('✅ AC chiusa con successo');
+    const auditIdChiuso = pendingAC.auditId;   // closeModal() azzera pendingAC
     closeModal();
     // Aggiorna dati locali
-    const auditLocal = DATA.audits.find(a=>a._id===pendingAC.auditId);
+    const auditLocal = DATA.audits.find(a=>a._id===auditIdChiuso);
     if (auditLocal) { auditLocal.nc_list = ncList; auditLocal.ac_chiuse = acChiuse; }
     renderAC();
   } catch(e) {
@@ -1880,9 +1936,14 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(srRows), 'SafeReport');
 
   // Sheet 4: NC Aperte
-  const ncRows = [['Sito','Impresa','Data audit','Voce NC','Sezione','Livello','Scadenza AC','Stato AC']];
-  DATA.audits.flatMap(a=>(a.nc_list||[]).map(nc=>({...nc,sito:a.sito,impresa:a.impresa,data:a.data_audit}))).forEach(nc=>{ncRows.push([nc.sito||'',nc.impresa||'',nc.data||'',nc.voce_testo||'',nc.sezione||'',nc.livello||'',nc.scadenza||'',nc.stato_ac||'aperta']);});
+  const ncRows = [['Sito','Impresa','Data audit','Voce NC','Sezione','Livello','Scadenza AC','Stato AC','Fonte','Natura']];
+  DATA.audits.flatMap(a=>(a.nc_list||[]).map(nc=>({...nc,sito:a.sito,impresa:a.impresa,data:a.data_audit,origine:a.origine||'interna',ente_terzo:a.ente_terzo||''}))).forEach(nc=>{ncRows.push([nc.sito||'',nc.impresa||'',nc.data||'',nc.voce_testo||'',nc.sezione||'',nc.livello||'',nc.scadenza||'',nc.stato_ac||'aperta',nc.origine==='terza_parte'?'Terza parte '+nc.ente_terzo:'Interna',nc.natura||'']);});
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ncRows), 'NC Aperte');
+
+  // Sheet 5: OBS
+  const obsRows = [['Sito','Impresa','Data audit','Voce OBS','Sezione','Priorita','Stato','Fonte','Natura','Ricorrente']];
+  DATA.audits.flatMap(a=>(a.obs_list||[]).map(o=>({...o,sito:a.sito,impresa:a.impresa,data:a.data_audit,origine:a.origine||'interna',ente_terzo:a.ente_terzo||''}))).forEach(o=>{obsRows.push([o.sito||'',o.impresa||'',o.data||'',o.voce_testo||o.nota||'',o.sezione||'',o.priorita||'',o.stato_obs||'in_monitoraggio',o.origine==='terza_parte'?'Terza parte '+o.ente_terzo:'Interna',o.natura||'',o.ricorrente?'Si':'']);});
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(obsRows), 'OBS');
 
   XLSX.writeFile(wb, `SPI_HSE_Somec_${trim}_${anno}${sito!=='ALL'?'_'+sito.split(' ')[0]:''}.xlsx`);
   showToast('✅ Excel scaricato');
