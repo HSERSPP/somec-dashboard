@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Import Audit Euroiso</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+:root{--blue:#1a3a5c;--green:#1a7a4a;--red:#c0392b;--gray:#7f8c8d;--border:#dde1e6;--bg:#f4f5f7;--text:#1f2d3d}
+*{box-sizing:border-box}
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+header{background:var(--blue);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:17px}header p{margin:4px 0 0;font-size:12px;opacity:.85}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.07);padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 18px}
+.grid div label{display:block;font-size:10px;text-transform:uppercase;color:var(--gray);font-weight:700}
+.kpi{display:flex;flex-wrap:wrap;gap:10px}
+.kpi div{flex:1;min-width:110px;background:var(--bg);border-radius:6px;padding:8px 10px;text-align:center}
+.kpi b{display:block;font-size:20px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px}
+th{background:var(--blue);color:#fff;text-align:left;padding:7px 8px;font-size:11px}
+td{padding:6px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}
+.b{display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700}
+.nc3{background:#fdecea;color:#c0392b}.nc2{background:#fdedec;color:#e74c3c}
+.o3{background:#fdecea;color:#c0392b}.o2{background:#fef9e7;color:#b9770e}.o1{background:#f0f2f5;color:#7f8c8d}
+.ric{background:#fff3e0;color:#e65100}
+.btn{border:0;border-radius:6px;padding:9px 16px;font-weight:700;cursor:pointer;color:#fff;font-size:13px}
+.btn-green{background:var(--green)}.btn-red{background:var(--red)}.btn:disabled{opacity:.5;cursor:default}
+#log{white-space:pre-wrap;font-family:monospace;font-size:12px;margin-top:10px}
+.note{font-size:12px;color:var(--gray);line-height:1.5}
+</style>
+</head>
+<body>
+<header>
+  <h1>Import audit di terza parte — Euroiso</h1>
+  <p>Verbale 15563-A · Sopralluogo stabilimento Somec del 28/09/2026 · Registro AC Dashboard SPI</p>
+</header>
+<main>
+  <div class="card">
+    <div class="grid">
+      <div><label>Ente / auditor</label>Euroiso — F. Fedrigo</div>
+      <div><label>Data sopralluogo</label>28/09/2026</div>
+      <div><label>Periodo SPI (presa in carico)</label>Q4 2026</div>
+      <div><label>Sito</label>Stabilimento Somec</div>
+      <div><label>Aree verificate</label>6 (denominatore Unsafe)</div>
+      <div><label>ID documento Firestore</label><code id="docid"></code></div>
+    </div>
+  </div>
+  <div class="card kpi" id="kpi"></div>
+  <div class="card">
+    <p class="note">Regole applicate in Dashboard: le NC entrano nel registro AC e nell'indice <b>Chiusura AC</b>; nell'indice <b>Unsafe Acts/Conditions</b> contano solo i rilievi di natura <b>operativa</b> divisi per le aree verificate; i rilievi <b>ambientali</b> (G1–G5) restano nel registro ma fuori dallo SPI sicurezza; DPI, Ispezioni e Conformità documentale restano calcolati sui soli audit interni.<br>
+    Le scadenze AC non sono preimpostate: vanno assegnate dal piano di chiusura (✏️ nel tab Azioni Correttive).<br>
+    L'import usa un ID fisso: una seconda esecuzione viene bloccata, quindi non si creano duplicati.</p>
+    <button class="btn btn-green" id="btn-imp" onclick="importa()">⬆ Importa i 43 rilievi in Dashboard</button>
+    <button class="btn btn-red" id="btn-del" onclick="annulla()" style="margin-left:8px">✖ Annulla import</button>
+    <div id="log"></div>
+  </div>
+  <div class="card table-wrap">
+    <table><thead><tr><th>Cod.</th><th>Rilievo</th><th>Classificazione</th><th>Natura</th><th>Euroiso</th></tr></thead><tbody id="tb"></tbody></table>
+  </div>
+</main>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+const DOC_ID = 'EUROISO-15563-A';
+const RILIEVI = [
+ {
+  "cod": "A1",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A1. Linea vetri – sistemi che escludono i tappeti sensibili — sono presenti sistemi che consentono di escludere il funzionamento dei tappeti sensibili.",
+  "rischio": "perdita della funzione di protezione dell'area pericolosa, con possibile accesso degli operatori alle zone in movimento.",
+  "suggerimento": "Rimuovere i sistemi di esclusione. • Verificare il corretto funzionamento dei tappeti. • Capire con i preposti di reparto quale esigenza operativa ha portato all'esclusione (es. interventi di regolazione, false attivazioni), così da risolvere la causa e non solo l'effetto.",
+  "priorita_euroiso": "P1",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 3
+ },
+ {
+  "cod": "A2",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A2. Linea assemblaggio vetri – protezione rimossa — una protezione della linea risulta rimossa.",
+  "rischio": "accessibilità a parti in movimento.",
+  "suggerimento": "riposizionare la protezione. Se la rimozione dipende da esigenze di accesso, valutare con il costruttore una protezione apribile e interbloccata.",
+  "priorita_euroiso": "P1",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 3
+ },
+ {
+  "cod": "A3",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A3. Linea assemblaggio vetri – accesso in quota — in alcune fasi gli operatori accedono alle parti alte della linea arrampicandosi sulla struttura.",
+  "rischio": "caduta dall'alto e scivolamento.",
+  "suggerimento": "Mettere a disposizione mezzi di accesso idonei (PLE, scale a torre conformi o piattaforme dedicate). • Per le piattaforme fisse: se sono indipendenti dalla macchina basta la conformità alla EN ISO 14122. Se sono integrate e servono per accedere a parti della macchina, va aggiornata la valutazione dei rischi della macchina e quindi verificata la sua conformità CE.",
+  "priorita_euroiso": "P1",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 3
+ },
+ {
+  "cod": "A4",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A4. Troncatrice per legno – doppio comando — il doppio comando manuale non ha la funzione di azionamento sincrono.",
+  "rischio": "possibilità di azionare la macchina con una mano libera nella zona di taglio.",
+  "suggerimento": "adeguare il comando a due mani al tipo III secondo EN ISO 13851, cioè ad azione mantenuta e sincrona.",
+  "priorita_euroiso": "P1",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 3
+ },
+ {
+  "cod": "A5",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A5. Macchine in costruzione — sono presenti macchine in fase di realizzazione, con un punto di schiacciamento tra ruota e profilo.",
+  "rischio": "schiacciamento degli arti superiori.",
+  "suggerimento": "completare la procedura di certificazione CE prima dell'utilizzo. Soluzioni tecniche possibili: • Ripari fissi dimensionati secondo le distanze di sicurezza della EN ISO 13857. • In alternativa, comando ad azione mantenuta con velocità non superiore a 5 m/min e sistema di comando con PL=d secondo EN ISO 13849-1 (doppio canale, interruzione dell'energia con 2 dispositivi in serie, velocità controllata da unità di sicurezza). • In entrambi i casi, ruote bloccabili.",
+  "priorita_euroiso": "P1 prima della messa in servizio",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "A6",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A6. Nastro di estrazione trucioli — è presente un'apertura tra elementi mobili e fissi da verificare.",
+  "rischio": "trascinamento o schiacciamento.",
+  "suggerimento": "verificare l'apertura rispetto alle distanze minime della EN ISO 13854. Se non si rispettano, installare un riparo secondo la EN ISO 13857.",
+  "priorita_euroiso": "P1",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 2
+ },
+ {
+  "cod": "A7",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A7. Trapano a colonna e molatrici a colonna — Lo schermo di protezione della punta del trapano è regolato troppo alto. Il poggiapezzi delle molatrici è distante dalla mola.",
+  "rischio": "Trapano: contatto con l'utensile. Molatrici: trascinamento del pezzo e della mano tra poggiapezzi e mola.",
+  "suggerimento": "Trapano: abbassare lo schermo. • Molatrici: regolare il poggiapezzi a non più di 2 mm dalla mola e inserire questa verifica nei controlli periodici di reparto.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "A8",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A8. Filtro troncatrice — il filtro necessita di manutenzione.",
+  "rischio": "ridotta efficacia di captazione.",
+  "suggerimento": "manutenzione secondo le indicazioni del costruttore, con registrazione. Lo scarico dell'aria filtrata in ambiente è accettabile solo per lavorazioni saltuarie.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "A9",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A9. Fusore colla poliuretanica — Completare la captazione localizzata. • Mantenere aggiornata la formazione specifica sui diisocianati.",
+  "rischio": "",
+  "suggerimento": "Completare la captazione localizzata. • Mantenere aggiornata la formazione specifica sui diisocianati.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "A10",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A10. Aspirazione generale — Completare il collegamento all'impianto di aspirazione generale con emissione all'esterno, in linea con gli indirizzi SPISAL Veneto e FVG. • Ripristinare i cartelli coperti o rimossi durante la nuova installazione.",
+  "rischio": "",
+  "suggerimento": "Completare il collegamento all'impianto di aspirazione generale con emissione all'esterno, in linea con gli indirizzi SPISAL Veneto e FVG. • Ripristinare i cartelli coperti o rimossi durante la nuova installazione.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "A11",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A11. Accessori di sollevamento non CE — sono in uso accessori (grilli, ganci) privi di marcatura CE.",
+  "rischio": "cedimento dell'accessorio o del punto di aggancio.",
+  "suggerimento": "Sostituirli con accessori marcati CE e di portata idonea. • Verificare anche la resistenza a rifollamento della lamiera del componente sollevato nel punto di presa.",
+  "priorita_euroiso": "P1",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 2
+ },
+ {
+  "cod": "A12",
+  "sezione": "A. Reparti produttivi – Macchine e attrezzature",
+  "voce_testo": "A12. Movimentazione profili lunghi — i profili lunghi vengono spostati con transiti a carico sollevato.",
+  "rischio": "caduta o oscillazione del carico durante il transito.",
+  "suggerimento": "Rivedere la modalità operativa. • Valutare l'uso di un carrello laterale con presa su entrambi i lati.",
+  "priorita_euroiso": "P1",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "NC",
+  "livello": 2
+ },
+ {
+  "cod": "B1",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B1. Parapetti — Verificare il fissaggio di tutti gli elementi. • Chiudere i varchi segnalati, superiori a 120 mm.",
+  "rischio": "",
+  "suggerimento": "Verificare il fissaggio di tutti gli elementi. • Chiudere i varchi segnalati, superiori a 120 mm.",
+  "priorita_euroiso": "P1",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 2
+ },
+ {
+  "cod": "B2",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B2. Scala con accesso a ripiano a quota superiore a 1 m — una scala consente l'accesso a un ripiano posto a oltre 1 m di altezza, privo di protezioni.",
+  "rischio": "caduta dall'alto. Pur sotto i 2 m, il rischio resta presente.",
+  "suggerimento": "Riposizionare la scala. • Dotare il ripiano di protezioni idonee (balaustra o parapetto).",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "B3",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B3. Scala a torre per accesso in copertura — Rimuovere la scala non conforme. • Garantire l'accesso alla copertura con sistemi conformi alle norme vigenti.",
+  "rischio": "",
+  "suggerimento": "Rimuovere la scala non conforme. • Garantire l'accesso alla copertura con sistemi conformi alle norme vigenti.",
+  "priorita_euroiso": "P1",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "NC",
+  "livello": 2
+ },
+ {
+  "cod": "B4",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B4. Scale portatili e sgabelli — Utilizzare solo scale conformi alla EN 131, oppure dichiarate conformi al D.Lgs. 81/08 con la relativa documentazione del costruttore. • Utilizzare sgabelli conformi alla EN 14183.",
+  "rischio": "",
+  "suggerimento": "Utilizzare solo scale conformi alla EN 131, oppure dichiarate conformi al D.Lgs. 81/08 con la relativa documentazione del costruttore. • Utilizzare sgabelli conformi alla EN 14183.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "B5",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B5. Manichetta antincendio d'angolo — Migliorare l'accessibilità della manichetta. • Riposizionare il relativo cartello.",
+  "rischio": "",
+  "suggerimento": "Migliorare l'accessibilità della manichetta. • Riposizionare il relativo cartello.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "B6",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B6. Vie di fuga esterne — in prossimità di alcune uscite di sicurezza sono presenti mezzi in sosta.",
+  "rischio": "",
+  "suggerimento": "Applicare segnaletica di divieto di sosta davanti alle uscite. • Inserire la verifica nei controlli periodici della squadra di emergenza.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "B7",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B7. Cavi elettrici volanti — raccogliere i cavi in canaline o passacavi a pavimento.",
+  "rischio": "",
+  "suggerimento": "raccogliere i cavi in canaline o passacavi a pavimento.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "B8",
+  "sezione": "B. Reparti produttivi – Luoghi di lavoro, accessi, emergenza",
+  "voce_testo": "B8. Vie di circolazione — richiamare il personale a mantenere sgombre le vie di circolazione.",
+  "rischio": "",
+  "suggerimento": "richiamare il personale a mantenere sgombre le vie di circolazione.",
+  "priorita_euroiso": "P3",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 1
+ },
+ {
+  "cod": "C1",
+  "sezione": "C. Agenti chimici e infiammabili",
+  "voce_testo": "C1. Quantità in reparto — sono presenti recipienti con quantità superiori al fabbisogno del turno. Alcuni recipienti sono aperti e alcuni non sono su bacino di contenimento.",
+  "rischio": "incendio, sversamento, esposizione.",
+  "suggerimento": "Tenere in reparto solo il quantitativo necessario al turno (All. IV, pt. 2.1.2 D.Lgs. 81/08). • Riportare l'eccedenza nel magazzino vernici. • Tenere tutti i recipienti chiusi e posizionati su bacino.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "C2",
+  "sezione": "C. Agenti chimici e infiammabili",
+  "voce_testo": "C2. Armadi per infiammabili — bombolette e contenitori di infiammabili sono custoditi in un armadio grigio non idoneo.",
+  "rischio": "",
+  "suggerimento": "collocarli in armadio di sicurezza conforme alla EN 14470 (pareti resistenti al fuoco, bacino, aerazione), entro il limite di 50 litri.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "C3",
+  "sezione": "C. Agenti chimici e infiammabili",
+  "voce_testo": "C3. Infiammabili vicino ad apparecchi elettrici — allontanare i recipienti, pieni e vuoti, dagli apparecchi elettrici, anche se i recipienti sono chiusi.",
+  "rischio": "",
+  "suggerimento": "allontanare i recipienti, pieni e vuoti, dagli apparecchi elettrici, anche se i recipienti sono chiusi.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "C4",
+  "sezione": "C. Agenti chimici e infiammabili",
+  "voce_testo": "C4. Etichettatura — ripristinare le etichette dei contenitori, compresi i travasi, con le indicazioni di pericolo CLP.",
+  "rischio": "",
+  "suggerimento": "ripristinare le etichette dei contenitori, compresi i travasi, con le indicazioni di pericolo CLP.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "C5",
+  "sezione": "C. Agenti chimici e infiammabili",
+  "voce_testo": "C5. Maschera di protezione — individuare un armadietto pulito e dedicato per riporre la maschera di protezione.",
+  "rischio": "",
+  "suggerimento": "individuare un armadietto pulito e dedicato per riporre la maschera di protezione.",
+  "priorita_euroiso": "P3",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 1
+ },
+ {
+  "cod": "C6",
+  "sezione": "C. Agenti chimici e infiammabili",
+  "voce_testo": "C6. Bottiglie d'acqua nelle zone d'uso dei chimici — richiamare l'attenzione del personale e individuare un punto di appoggio dedicato, lontano dalle postazioni in cui si usano agenti chimici.",
+  "rischio": "",
+  "suggerimento": "richiamare l'attenzione del personale e individuare un punto di appoggio dedicato, lontano dalle postazioni in cui si usano agenti chimici.",
+  "priorita_euroiso": "P3",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 1
+ },
+ {
+  "cod": "D1",
+  "sezione": "D. Ricarica carrelli elevatori",
+  "voce_testo": "D1. Ricarica all'interno dei reparti — Completare il trasferimento della ricarica nelle aree esterne dedicate. • Dove la ricarica avviene ancora all'interno, anche per batterie al gel o “a secco”, mantenere un raggio di 2 m libero da materiale combustibile.",
+  "rischio": "",
+  "suggerimento": "Completare il trasferimento della ricarica nelle aree esterne dedicate. • Dove la ricarica avviene ancora all'interno, anche per batterie al gel o “a secco”, mantenere un raggio di 2 m libero da materiale combustibile.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "D2",
+  "sezione": "D. Ricarica carrelli elevatori",
+  "voce_testo": "D2. Nuove postazioni di ricarica — postazioni di recente realizzazione, con una caditoia nelle vicinanze.",
+  "rischio": "",
+  "suggerimento": "Definire come gestire un eventuale sversamento di elettrolita (istruzione operativa e/o mezzi di contenimento flessibili, es. copricaditoia). • Acquisire la documentazione sulle caratteristiche di reazione al fuoco dei teli di copertura. • Posizionare un estintore a CO2 facilmente raggiungibile da tutte le postazioni.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "D3",
+  "sezione": "D. Ricarica carrelli elevatori",
+  "voce_testo": "D3. Divieto di fumo nell'area di ricarica — nell'area di ricarica sono presenti mozziconi.",
+  "rischio": "",
+  "suggerimento": "Rafforzare la vigilanza sul rispetto del divieto. • Rimuovere tempestivamente i mozziconi. • Spostare il posacenere in un'area con minore presenza di combustibili e svuotarlo regolarmente.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "E1",
+  "sezione": "E. Stoccaggi e scaffalature",
+  "voce_testo": "E1. Cantilever in zona di passaggio — Eseguire la verifica qualitativa secondo la EN 16681 e le Linee Guida CSLP 2023. • Estenderla, in via prioritaria, alle scaffalature adiacenti a postazioni fisse di lavoro.",
+  "rischio": "",
+  "suggerimento": "Eseguire la verifica qualitativa secondo la EN 16681 e le Linee Guida CSLP 2023. • Estenderla, in via prioritaria, alle scaffalature adiacenti a postazioni fisse di lavoro.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "E2",
+  "sezione": "E. Stoccaggi e scaffalature",
+  "voce_testo": "E2. Cavallette — Nelle aree di stoccaggio su più livelli, impedire il transito pedonale. • Fissare le cavallette sempre con reggetta e non con nastro adesivo.",
+  "rischio": "",
+  "suggerimento": "Nelle aree di stoccaggio su più livelli, impedire il transito pedonale. • Fissare le cavallette sempre con reggetta e non con nastro adesivo.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "E3",
+  "sezione": "E. Stoccaggi e scaffalature",
+  "voce_testo": "E3. Pannello flesso — usare ripiani di appoggio adeguati al formato del pannello.",
+  "rischio": "",
+  "suggerimento": "usare ripiani di appoggio adeguati al formato del pannello.",
+  "priorita_euroiso": "P3",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 1
+ },
+ {
+  "cod": "E4",
+  "sezione": "E. Stoccaggi e scaffalature",
+  "voce_testo": "E4. Materiali con spigoli vivi in posizione precaria — Richiamare l'attenzione degli operatori nel deposito temporaneo. • Spostare le taniche di prodotti chimici presenti nell'area.",
+  "rischio": "",
+  "suggerimento": "Richiamare l'attenzione degli operatori nel deposito temporaneo. • Spostare le taniche di prodotti chimici presenti nell'area.",
+  "priorita_euroiso": "P3",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 1
+ },
+ {
+  "cod": "F1",
+  "sezione": "F. Vetreria",
+  "voce_testo": "F1. Aree interdette — riposizionare le catenelle che delimitano le aree interdette al passaggio.",
+  "rischio": "",
+  "suggerimento": "riposizionare le catenelle che delimitano le aree interdette al passaggio.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "F2",
+  "sezione": "F. Vetreria",
+  "voce_testo": "F2. Infiammabili — collocarli in armadio di sicurezza conforme alla EN 14470.",
+  "rischio": "",
+  "suggerimento": "collocarli in armadio di sicurezza conforme alla EN 14470.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "G1",
+  "sezione": "G. Aspetti ambientali e rifiuti",
+  "voce_testo": "G1. Impianto di trattamento acque — l'impianto presenta perdite d'acqua con impurità.",
+  "rischio": "",
+  "suggerimento": "Riparare l'impianto. • Se le perdite non sono eliminabili, installare un bacino di contenimento.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "ambientale",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "G2",
+  "sezione": "G. Aspetti ambientali e rifiuti",
+  "voce_testo": "G2. Fusto raccolta condensa dei compressori — Sostituire il fusto e posizionarlo su vasca di contenimento. • Rimuovere carta e nylon presenti nelle vicinanze.",
+  "rischio": "",
+  "suggerimento": "Sostituire il fusto e posizionarlo su vasca di contenimento. • Rimuovere carta e nylon presenti nelle vicinanze.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "ambientale",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "G3",
+  "sezione": "G. Aspetti ambientali e rifiuti",
+  "voce_testo": "G3. Deposito temporaneo rifiuti — separare i rifiuti per codice CER, in particolare tenendo distinti i pericolosi dai non pericolosi.",
+  "rischio": "",
+  "suggerimento": "separare i rifiuti per codice CER, in particolare tenendo distinti i pericolosi dai non pericolosi.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "ambientale",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "G4",
+  "sezione": "G. Aspetti ambientali e rifiuti",
+  "voce_testo": "G4. Area esterna Mag. 2 – rifiuti — avviare a recupero o smaltimento i rifiuti presenti, nel rispetto dei criteri del deposito temporaneo (art. 185-bis D.Lgs. 152/06): • Criterio temporale: almeno ogni 3 mesi, indipendentemente dalla quantità. • Criterio volumetrico: al raggiungimento di 30 m³, di cui massimo 10 m³ pericolosi. • In ogni caso il deposito non può superare 1 anno.",
+  "rischio": "",
+  "suggerimento": "avviare a recupero o smaltimento i rifiuti presenti, nel rispetto dei criteri del deposito temporaneo (art. 185-bis D.Lgs. 152/06): • Criterio temporale: almeno ogni 3 mesi, indipendentemente dalla quantità. • Criterio volumetrico: al raggiungimento di 30 m³, di cui massimo 10 m³ pericolosi. • In ogni caso il deposito non può superare 1 anno.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "ambientale",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "G5",
+  "sezione": "G. Aspetti ambientali e rifiuti",
+  "voce_testo": "G5. Pavimentazioni e aree vetro — Mantenere puliti l'area attorno al container vetri e l'area di stoccaggio dei rifiuti di vetro. • Evitare dilavamenti sulla pavimentazione [RIC].",
+  "rischio": "",
+  "suggerimento": "Mantenere puliti l'area attorno al container vetri e l'area di stoccaggio dei rifiuti di vetro. • Evitare dilavamenti sulla pavimentazione [RIC].",
+  "priorita_euroiso": "P3",
+  "ricorrente": true,
+  "natura": "ambientale",
+  "tipo": "OBS",
+  "priorita": 1
+ },
+ {
+  "cod": "H1",
+  "sezione": "H. Magazzino 2",
+  "voce_testo": "H1. Scaffalature — Installare paracolpi alla base dei montanti lungo le vie percorse dai carrelli. • Sostituire i fissaggi con nastro adesivo con sistemi idonei.",
+  "rischio": "",
+  "suggerimento": "Installare paracolpi alla base dei montanti lungo le vie percorse dai carrelli. • Sostituire i fissaggi con nastro adesivo con sistemi idonei.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "operativa",
+  "tipo": "OBS",
+  "priorita": 3
+ },
+ {
+  "cod": "H2",
+  "sezione": "H. Magazzino 2",
+  "voce_testo": "H2. Presidi antincendio — verificare che il numero e la posizione degli estintori siano adeguati al carico d'incendio del reparto.",
+  "rischio": "",
+  "suggerimento": "verificare che il numero e la posizione degli estintori siano adeguati al carico d'incendio del reparto.",
+  "priorita_euroiso": "P2",
+  "ricorrente": false,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 2
+ },
+ {
+  "cod": "H3",
+  "sezione": "H. Magazzino 2",
+  "voce_testo": "H3. Ricarica — individuare un'area di ricarica esterna.",
+  "rischio": "",
+  "suggerimento": "individuare un'area di ricarica esterna.",
+  "priorita_euroiso": "P2",
+  "ricorrente": true,
+  "natura": "tecnica",
+  "tipo": "OBS",
+  "priorita": 3
+ }
+];
+
+function buildDoc() {
+  const nc_list = [], obs_list = [];
+  RILIEVI.forEach(r => {
+    const base = { voce_id:'EUR15563-'+r.cod, voce_testo:r.voce_testo, sezione:r.sezione,
+      natura:r.natura, ricorrente:r.ricorrente, priorita_euroiso:r.priorita_euroiso,
+      rischio:r.rischio, suggerimento:r.suggerimento, nota:'', scadenza:null };
+    if (r.tipo==='NC') nc_list.push({...base, livello:r.livello, stato_ac:'aperta'});
+    else obs_list.push({...base, priorita:r.priorita, stato_obs:'in_monitoraggio'});
+  });
+  return {
+    id: DOC_ID,
+    timestamp: new Date().toISOString(),
+    anno: 2026, trimestre: 'Q4',
+    tipo: 'stabilimento',
+    modulo: 'Verbale Euroiso 15563-A',
+    origine: 'terza_parte', ente_terzo: 'Euroiso', rif_verbale: '15563-A',
+    import_tool: 'import_euroiso.html',
+    data_presa_in_carico: new Date().toISOString().slice(0,10),
+    sito: 'Stabilimento Somec -- sede principale',
+    data_audit: '2026-09-28',
+    impresa: 'Somec S.p.A.',
+    auditor: 'F. Fedrigo (Euroiso)',
+    referente: 'M. Sterchele (RSPP), V. Piccin (QHSE)',
+    reparto: '',
+    attivita: 'Verifica periodica ambienti di lavoro: reparti produttivi, vetreria, aree ricarica carrelli, area esterna Magazzino 2',
+    aree_verificate: 6,
+    cnt_c: 0, cnt_na: 0,
+    cnt_nc: nc_list.length, cnt_obs: obs_list.length,
+    nc_list, obs_list,
+    ac_aperte: nc_list.length, ac_chiuse: 0,
+    conformita_doc: 0, score_dpi: null, interviste: [],
+    giudizio: '',
+    conclusioni: "Realtà in evoluzione, con interventi strutturali avviati (aspirazione, postazioni di ricarica) e azioni di adeguamento in gran parte organizzative e manutentive. Priorità ai punti P1 (A1, A2, A4 dispositivi di protezione; A3 accesso in quota linea vetri). Per i punti ricorrenti: piano di chiusura con tempistiche e referenti, monitorato nel SGSL ISO 45001."
+  };
+}
+
+function render() {
+  document.getElementById('docid').textContent = DOC_ID;
+  const n = t => RILIEVI.filter(t).length;
+  document.getElementById('kpi').innerHTML = [
+    ['Rilievi', RILIEVI.length], ['NC', n(r=>r.tipo==='NC')], ['OBS', n(r=>r.tipo==='OBS')],
+    ['Operativi', n(r=>r.natura==='operativa')], ['Tecnici', n(r=>r.natura==='tecnica')],
+    ['Ambientali', n(r=>r.natura==='ambientale')], ['Ricorrenti', n(r=>r.ricorrente)]
+  ].map(([l,v])=>`<div><b>${v}</b>${l}</div>`).join('');
+  document.getElementById('tb').innerHTML = RILIEVI.map(r => {
+    const cl = r.tipo==='NC' ? `<span class="b nc${r.livello}">NC Lv.${r.livello}</span>`
+      : `<span class="b o${r.priorita}">OBS ${['','Bassa','Media','Alta'][r.priorita]}</span>`;
+    return `<tr><td><b>${r.cod}</b></td><td>${r.voce_testo}<br><span class="note">${r.sezione}</span></td>
+      <td>${cl}${r.ricorrente?' <span class="b ric">RIC</span>':''}</td><td>${r.natura}</td><td>${r.priorita_euroiso}</td></tr>`;
+  }).join('');
+}
+
+const log = m => document.getElementById('log').textContent += m + '\n';
+
+async function importa() {
+  const btn = document.getElementById('btn-imp');
+  btn.disabled = true;
+  try {
+    const ref = db.collection('audit_hse').doc(DOC_ID);
+    const snap = await ref.get();
+    if (snap.exists) { log('⚠️ Import già eseguito (documento ' + DOC_ID + ' presente). Nessuna modifica.'); return; }
+    const doc = buildDoc();
+    if (!confirm(`Importare ${doc.cnt_nc} NC e ${doc.cnt_obs} OBS Euroiso nel periodo Q4 2026?`)) return;
+    await ref.set(doc);
+    log(`✅ Import completato: ${doc.cnt_nc} NC + ${doc.cnt_obs} OBS. Aprire la Dashboard su Q4 2026 → tab Azioni Correttive.`);
+  } catch(e) { log('❌ Errore: ' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+async function annulla() {
+  try {
+    const ref = db.collection('audit_hse').doc(DOC_ID);
+    const snap = await ref.get();
+    if (!snap.exists) { log('Nessun import da annullare.'); return; }
+    const d = snap.data();
+    const gestite = (d.nc_list||[]).filter(x=>x.stato_ac==='chiusa'||x.nota).length + (d.obs_list||[]).filter(x=>x.nota_gestione).length;
+    const msg = gestite ? `ATTENZIONE: ${gestite} rilievi risultano già aggiornati o chiusi in Dashboard e verrebbero persi.\n\nEliminare comunque il documento ${DOC_ID}?` : `Eliminare il documento ${DOC_ID}?`;
+    if (!confirm(msg)) return;
+    await ref.delete();
+    log('🗑 Import annullato: documento eliminato.');
+  } catch(e) { log('❌ Errore: ' + e.message); }
+}
+
+render();
+</script>
+</body>
+</html>
