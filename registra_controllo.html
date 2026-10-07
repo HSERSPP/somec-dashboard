@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>Registra Controllo Reparto</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<style>
+:root{--blue:#1a3a5c;--green:#1a7a4a;--red:#c0392b;--amber:#a06010;--gray:#7f8c8d;--border:#dde1e6;--bg:#f4f5f7;--text:#1f2d3d}
+*{box-sizing:border-box}
+body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13px}
+header{background:var(--blue);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:17px}header p{margin:4px 0 0;font-size:12px;opacity:.85}
+main{max-width:1000px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.07);padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--blue);margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 16px}
+label.l{display:block;font-size:10px;text-transform:uppercase;color:var(--gray);font-weight:700;margin-bottom:3px}
+input,select,textarea{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 9px;font-size:13px;font-family:inherit;color:var(--text);background:#fff}
+textarea{min-height:52px;resize:vertical}
+.chk{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px}
+.chk label{display:flex;align-items:center;gap:6px;font-size:12px}
+.chk input{width:auto}
+.ril{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;background:#fafbfc}
+.ril-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;font-size:12px;color:var(--blue)}
+.ril .grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.btn{border:0;border-radius:6px;padding:9px 16px;font-weight:700;cursor:pointer;color:#fff;font-size:13px}
+.btn-green{background:var(--green)}.btn-blue{background:var(--blue)}.btn-red{background:var(--red)}.btn-light{background:#e8ebef;color:var(--text)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-x{background:none;border:0;color:var(--red);font-size:16px;cursor:pointer}
+.note{font-size:12px;color:var(--gray);line-height:1.5}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:640px}
+th{background:var(--blue);color:#fff;text-align:left;padding:7px 8px;font-size:11px}
+td{padding:6px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}
+#log{white-space:pre-wrap;font-family:monospace;font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Registra controllo documentato — Reparti stabilimento</h1>
+  <p>Sopralluoghi RSPP/HSE, verbali e report cartacei · Alimentano registro AC e speedometer SPI di reparto</p>
+</header>
+<main>
+  <div class="card">
+    <h2>Dati del controllo</h2>
+    <div class="grid">
+      <div><label class="l">Reparto *</label><select id="f-reparto"></select></div>
+      <div><label class="l">Data controllo *</label><input type="date" id="f-data"></div>
+      <div><label class="l">Tipo documento *</label>
+        <select id="f-tipo">
+          <option>Sopralluogo RSPP/HSE</option>
+          <option>Verbale di sopralluogo</option>
+          <option>Report cartaceo</option>
+          <option>Riunione / giro con preposto</option>
+          <option>Altro</option>
+        </select></div>
+      <div><label class="l">Riferimento documento *</label><input id="f-rif" placeholder="es. Verbale n. 12/2026, file, protocollo"></div>
+      <div><label class="l">Eseguito da *</label><input id="f-auditor" placeholder="es. M. Sterchele (RSPP)"></div>
+      <div><label class="l">Partecipanti</label><input id="f-referente" placeholder="es. preposto di reparto"></div>
+    </div>
+    <div class="chk">
+      <label><input type="checkbox" id="f-dpi"> DPI verificati nel controllo</label>
+      <label><input type="checkbox" id="f-docu"> Documentazione verificata (formazione, idoneità, consegna DPI)</label>
+    </div>
+    <div style="margin-top:10px"><label class="l">Sintesi / conclusioni</label><textarea id="f-concl" placeholder="Esito sintetico del controllo"></textarea></div>
+  </div>
+
+  <div class="card">
+    <h2>Rilievi</h2>
+    <p class="note" style="margin-top:0">Se il controllo non ha evidenziato rilievi, lasciare vuoto: viene registrato come controllo conforme. Le NC entrano nel registro AC della Dashboard.</p>
+    <div id="rilievi"></div>
+    <button class="btn btn-light" onclick="addRilievo()">+ Aggiungi rilievo</button>
+  </div>
+
+  <div class="card">
+    <button class="btn btn-green" id="btn-save" onclick="salva()">💾 Registra controllo</button>
+    <div id="log"></div>
+  </div>
+
+  <div class="card">
+    <h2>Controlli registrati</h2>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <label class="l" style="margin:0">Anno</label>
+      <select id="f-anno-list" style="width:auto" onchange="carica()"></select>
+      <button class="btn btn-blue" onclick="carica()">↻ Aggiorna</button>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Data</th><th>Reparto</th><th>Tipo / riferimento</th><th>Eseguito da</th><th>NC</th><th>OBS</th><th></th></tr></thead>
+      <tbody id="tb"><tr><td colspan="7" class="note">Caricamento...</td></tr></tbody>
+    </table></div>
+  </div>
+</main>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyDDwVVkLyfanLnXB58aozMuMRkx1kZPmBg",
+  authDomain:"somec-hse.firebaseapp.com",
+  projectId:"somec-hse",
+  storageBucket:"somec-hse.firebasestorage.app",
+  messagingSenderId:"547746230687",
+  appId:"1:547746230687:web:608c805c18bb1792134daa"
+});
+const db = firebase.firestore();
+const SITO = 'Stabilimento Somec -- sede principale';
+const REPARTI = [
+  ['R1','R1 — Uffici'],['R3','R3 — Lavorazione Alluminio'],['R3.1','R3.1 — Pianali'],['R4','R4 — Assemblaggio'],
+  ['R5','R5 — Magazzino'],['R5.1','R5.1 — Imballo'],['R7','R7 — Carpenteria'],['R8','R8 — Vetreria'],['RE','RE — Area Esterna'],
+];
+let nRil = 0;
+const $ = id => document.getElementById(id);
+const esc = t => String(t||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const log = m => $('log').textContent = m;
+
+function init() {
+  $('f-reparto').innerHTML = '<option value="">— Seleziona —</option>' + REPARTI.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  $('f-data').value = new Date().toISOString().slice(0,10);
+  const y = new Date().getFullYear();
+  $('f-anno-list').innerHTML = [y, y-1].map(a=>`<option value="${a}">${a}</option>`).join('');
+  carica();
+}
+
+function addRilievo() {
+  const i = ++nRil;
+  const div = document.createElement('div');
+  div.className = 'ril'; div.id = 'ril-'+i;
+  div.innerHTML = `
+    <div class="ril-top"><span>Rilievo</span><button class="btn-x" title="Rimuovi" onclick="this.closest('.ril').remove()">✕</button></div>
+    <div style="margin-bottom:8px"><label class="l">Descrizione *</label><textarea class="r-testo" placeholder="Descrizione oggettiva del rilievo"></textarea></div>
+    <div class="grid">
+      <div><label class="l">Tipo</label><select class="r-tipo" onchange="aggLivello(${i})"><option value="OBS">Osservazione</option><option value="NC">Non conformità</option></select></div>
+      <div><label class="l">Livello / priorità</label><select class="r-liv"></select></div>
+      <div><label class="l">Natura</label><select class="r-nat"><option value="operativa">Operativa</option><option value="tecnica">Tecnica</option><option value="ambientale">Ambientale</option></select></div>
+      <div><label class="l">Ambito</label><select class="r-amb"><option value="">Generale</option><option value="dpi">DPI</option><option value="doc">Documentazione</option></select></div>
+      <div class="r-scad-wrap" style="display:none"><label class="l">Scadenza AC</label><input type="date" class="r-scad"></div>
+    </div>`;
+  $('rilievi').appendChild(div);
+  aggLivello(i);
+}
+function aggLivello(i) {
+  const d = $('ril-'+i), nc = d.querySelector('.r-tipo').value === 'NC';
+  d.querySelector('.r-liv').innerHTML = nc
+    ? '<option value="1">Lv.1 Minore</option><option value="2">Lv.2 Medio</option><option value="3">Lv.3 Elevato</option>'
+    : '<option value="1">Bassa</option><option value="2" selected>Media</option><option value="3">Alta</option>';
+  d.querySelector('.r-scad-wrap').style.display = nc ? '' : 'none';
+}
+
+async function salva() {
+  const reparto = $('f-reparto').value, data = $('f-data').value, rif = $('f-rif').value.trim(), auditor = $('f-auditor').value.trim();
+  if (!reparto || !data || !rif || !auditor) { log('⚠️ Compilare reparto, data, riferimento documento ed esecutore.'); return; }
+  const ril = [...document.querySelectorAll('.ril')].map(d => ({
+    testo: d.querySelector('.r-testo').value.trim(), tipo: d.querySelector('.r-tipo').value,
+    liv: parseInt(d.querySelector('.r-liv').value), natura: d.querySelector('.r-nat').value,
+    ambito: d.querySelector('.r-amb').value, scad: d.querySelector('.r-scad').value || null,
+  }));
+  if (ril.some(r=>!r.testo)) { log('⚠️ Ogni rilievo deve avere una descrizione (o va rimosso).'); return; }
+
+  const anno = parseInt(data.slice(0,4)), m = parseInt(data.slice(5,7));
+  const trimestre = m<=3?'Q1':m<=6?'Q2':m<=9?'Q3':'Q4';
+  const id = `REG-${reparto.replace('.','')}-${data.replace(/-/g,'')}-${Math.floor(Math.random()*9000)+1000}`;
+  const tipoDoc = $('f-tipo').value;
+  const nc_list = [], obs_list = [];
+  ril.forEach((r,k) => {
+    const base = { voce_id:`${id}-${k+1}`, voce_testo:r.testo, sezione:`${tipoDoc} — ${reparto}`,
+      natura:r.natura, ambito:r.ambito||null, reparto, nota:'', scadenza:r.scad };
+    if (r.tipo==='NC') nc_list.push({...base, livello:r.liv, stato_ac:'aperta'});
+    else obs_list.push({...base, priorita:r.liv, stato_obs:'in_monitoraggio'});
+  });
+  const dpiNC = nc_list.filter(x=>x.ambito==='dpi').length, dpiOBS = obs_list.filter(x=>x.ambito==='dpi').length;
+  const doc = {
+    id, timestamp: new Date().toISOString(), anno, trimestre,
+    tipo: 'stabilimento', modulo: 'Registrazione controllo documentato',
+    origine: 'interna', fonte: 'registrazione_rspp',
+    tipo_documento: tipoDoc, rif_documento: rif,
+    sito: SITO, reparto, data_audit: data,
+    impresa: 'Somec S.p.A.', auditor, referente: $('f-referente').value.trim(),
+    cnt_c: 0, cnt_na: 0, cnt_nc: nc_list.length, cnt_obs: obs_list.length,
+    nc_list, obs_list, ac_aperte: nc_list.length, ac_chiuse: 0,
+    // null = aspetto non verificato: escluso dal calcolo dell'indice (non vale 0)
+    score_dpi: $('f-dpi').checked ? Math.max(0, 5 - dpiNC*2 - dpiOBS*0.5) : null,
+    conformita_doc: $('f-docu').checked ? nc_list.filter(x=>x.ambito==='doc').length : null,
+    interviste: [], giudizio: '', conclusioni: $('f-concl').value.trim(),
+  };
+  $('btn-save').disabled = true;
+  try {
+    await db.collection('audit_hse').doc(id).set(doc);
+    log(`✅ Controllo registrato (${id}): ${reparto}, ${data.split('-').reverse().join('/')} — ${nc_list.length} NC, ${obs_list.length} OBS.`);
+    $('rilievi').innerHTML = ''; $('f-rif').value = ''; $('f-concl').value = '';
+    $('f-dpi').checked = false; $('f-docu').checked = false;
+    $('f-anno-list').value = String(anno);
+    carica();
+  } catch(e) { log('❌ Errore: ' + e.message); }
+  finally { $('btn-save').disabled = false; }
+}
+
+async function carica() {
+  const anno = parseInt($('f-anno-list').value);
+  try {
+    const snap = await db.collection('audit_hse').where('anno','==',anno).where('fonte','==','registrazione_rspp').get();
+    const rows = snap.docs.map(d=>({...d.data(), _id:d.id})).sort((a,b)=>(b.data_audit||'').localeCompare(a.data_audit||''));
+    $('tb').innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${esc((r.data_audit||'').split('-').reverse().join('/'))}</td><td><b>${esc(r.reparto)}</b></td>
+      <td>${esc(r.tipo_documento)}<br><span class="note">${esc(r.rif_documento)}</span></td>
+      <td>${esc(r.auditor)}</td><td>${r.cnt_nc||0}</td><td>${r.cnt_obs||0}</td>
+      <td><button class="btn-x" title="Elimina" onclick="elimina('${r._id}')">🗑</button></td></tr>`).join('')
+      : '<tr><td colspan="7" class="note">Nessun controllo registrato per l\'anno selezionato.</td></tr>';
+  } catch(e) { $('tb').innerHTML = `<tr><td colspan="7" class="note">❌ ${esc(e.message)}</td></tr>`; }
+}
+
+async function elimina(id) {
+  if (!confirm(`Eliminare la registrazione ${id}?\n\nVengono eliminati anche i relativi rilievi nel registro AC.`)) return;
+  try { await db.collection('audit_hse').doc(id).delete(); log('🗑 Registrazione eliminata.'); carica(); }
+  catch(e) { log('❌ Errore: ' + e.message); }
+}
+
+init();
+</script>
+</body>
+</html>
