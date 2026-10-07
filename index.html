@@ -573,6 +573,8 @@ function calcVotoReparto(reparto) {
   if (prR.length) fonti.push(`preposti ${prR.length}`);
   if (tp.length) fonti.push(tp.map(x=>x.ente_terzo||'terza parte').join(', '));
   if (srR.length) fonti.push(`segnalazioni ${srR.length}`);
+  const oreRep = (DATA.ore_lavorate||[]).filter(o => o.reparto===reparto && (isAnnoIntero || o.trimestre===trim))
+    .reduce((t,o)=>t+(o.ore||0),0);
 
   if (!auditR.length && !tp.length && !srR.length && !prR.length && !manuale.length) {
     REPARTO_INFO[reparto] = {fonti:[], copertura:0};
@@ -613,7 +615,7 @@ function calcVotoReparto(reparto) {
 
   const pesoTot = SPI_CONFIG.reduce((s,c)=>s+c.peso,0);
   const pesoOk = SPI_CONFIG.filter(c=>scores[c.id]!==null&&scores[c.id]!==undefined).reduce((s,c)=>s+c.peso,0);
-  REPARTO_INFO[reparto] = {fonti, copertura: Math.round(pesoOk/pesoTot*100)};
+  REPARTO_INFO[reparto] = {fonti, copertura: Math.round(pesoOk/pesoTot*100), ore: oreRep};
 
   if (Object.values(scores).every(v=>v===null||v===undefined)) return null;
   return calcVoto(scores);
@@ -632,7 +634,7 @@ function renderSpeedometerReparti() {
     const inf = REPARTO_INFO[r.id] || {fonti:[]};
     const nota = voto===null
       ? '<span style="color:#c0392b">Nessun controllo registrato nel periodo</span>'
-      : `${inf.fonti.join(' · ')}<br><span style="color:${inf.copertura>=70?'#1a7a4a':'#a06010'}">copertura indici ${inf.copertura}%</span>`;
+      : `${inf.fonti.join(' · ')}<br><span style="color:${inf.copertura>=70?'#1a7a4a':'#a06010'}">copertura indici ${inf.copertura}%</span>${inf.ore?` · ${inf.ore.toLocaleString('it-IT')} h`:''}`;
     html += `<div style="text-align:center;width:200px">${drawSpeedSVG(voto??0, r.nome, voto===null)}
       <div style="font-size:10px;color:#7a8090;line-height:1.35;margin-top:-6px">${nota}</div></div>`;
   });
@@ -831,7 +833,8 @@ function calcSPI(aAll,sr,pr,opts) {
   const trim = document.getElementById('f-trim')?.value || 'ANNO';
   const oreFiltrate = (DATA.ore_lavorate||[]).filter(o => {
     const trimMatch = trim==='ANNO' || o.trimestre===trim;
-    return trimMatch && o.ore > 0;
+    // le righe per reparto sono il dettaglio del totale stabilimento: non vanno sommate di nuovo
+    return trimMatch && o.ore > 0 && !o.reparto;
   });
   const totOre = oreFiltrate.reduce((s,o)=>s+(o.ore||0),0);
   if (!totOre) { scores.ore = 2; }
