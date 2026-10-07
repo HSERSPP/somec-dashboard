@@ -452,13 +452,16 @@ const AREA_TO_REPARTO = {
 // Firestore (where('sito','==',...)) esclude silenziosamente queste
 // segnalazioni ogni volta che si seleziona un sito specifico nel filtro.
 const SITO_ALIASES = {
-  'Genova (Fincantieri)':                      ['Genova (Fincantieri)', 'Genova'],
-  'Marghera (Fincantieri)':                    ['Marghera (Fincantieri)', 'Marghera'],
-  'Monfalcone (Fincantieri)':                  ['Monfalcone (Fincantieri)', 'Monfalcone'],
-  'Turku (Meyer)':                             ['Turku (Meyer)', 'Turku'],
-  "Saint-Nazaire (Chantiers de l'Atlantique)": ["Saint-Nazaire (Chantiers de l'Atlantique)", 'Saint-Nazaire'],
-  'Papenburg (Meyer Werft)':                   ['Papenburg (Meyer Werft)', 'Papenburg'],
-  'Stabilimento Somec -- sede principale':     ['Stabilimento Somec -- sede principale', 'Stabilimento Somec — sede principale', 'Stabilimento / Produzione Somec'],
+  // Le voci "Cantiere — ..." / "Stabilimento — ..." sono le aree salvate dall'App Preposti (campo sito)
+  'Genova (Fincantieri)':                      ['Genova (Fincantieri)', 'Genova', 'Cantiere — Genova (Fincantieri)'],
+  'Marghera (Fincantieri)':                    ['Marghera (Fincantieri)', 'Marghera', 'Cantiere — Marghera (Fincantieri)'],
+  'Monfalcone (Fincantieri)':                  ['Monfalcone (Fincantieri)', 'Monfalcone', 'Cantiere — Monfalcone (Fincantieri)'],
+  'Turku (Meyer)':                             ['Turku (Meyer)', 'Turku', 'Cantiere — Turku (Meyer)'],
+  "Saint-Nazaire (Chantiers de l'Atlantique)": ["Saint-Nazaire (Chantiers de l'Atlantique)", 'Saint-Nazaire', "Cantiere — Saint-Nazaire (Chantiers de l'Atlantique)"],
+  'Papenburg (Meyer Werft)':                   ['Papenburg (Meyer Werft)', 'Papenburg', 'Cantiere — Papenburg (Meyer Werft)'],
+  'Stabilimento Somec -- sede principale':     ['Stabilimento Somec -- sede principale', 'Stabilimento Somec — sede principale', 'Stabilimento / Produzione Somec',
+    'Stabilimento — Taglio/Lavorazioni (R3)', 'Stabilimento — Assemblaggio (R4)', 'Stabilimento — Vetreria (R8)',
+    'Stabilimento — Carpenteria (R7)', 'Stabilimento — Manutenzioni', 'Magazzino / Supply Chain', 'Ufficio / Funzioni Corporate'],
 };
 function sitoAliases(sitoCanonico) { return SITO_ALIASES[sitoCanonico] || [sitoCanonico]; }
 function isStessoSito(sitoRecord, sitoCanonico) { return sitoAliases(sitoCanonico).includes(sitoRecord); }
@@ -476,6 +479,8 @@ const REPARTI_CONFIG = [
 ];
 
 function getRepartoPerSR(sr) {
+  // Reparto assegnato a mano dal tab Azioni Correttive: ha la precedenza su tutto
+  if (sr.reparto) return sr.reparto === 'NESSUNO' ? null : sr.reparto;
   // Fonte primaria: il campo "area" salvato con la segnalazione stessa
   // (es. "R5 — Magazzino e Spedizione", "R3 — Lavorazione Alluminio").
   // Il modulo SafeReport lo raccoglie già in fase di compilazione, quindi
@@ -490,70 +495,127 @@ function getRepartoPerSR(sr) {
   return AREA_TO_REPARTO[sr._id||sr.id] || null;
 }
 
+// ── VOTO REPARTO ──────────────────────────────────────────
+// Fonti, in ordine: audit interni del periodo (Audit App + controlli registrati da RSPP),
+// in mancanza l'ultimo audit interno degli ultimi 12 mesi; controlli App Preposti del
+// periodo; rilievi di terza parte assegnati al reparto; segnalazioni SafeReport del periodo.
+const STAB_CANON = 'Stabilimento Somec -- sede principale';
+const REPARTO_INFO = {};
+function repartoPreposto(p) {
+  if (p.reparto) return p.reparto;
+  const m = String(p.sito||'').match(/\((R\d+(?:\.\d+)?|RE)\)/);
+  if (m) return m[1];
+  if (p.ramo === 'magazzino') return 'R5';
+  if (p.ramo === 'ufficio')   return 'R1';
+  return null;
+}
+function isPrepostoStab(p) {
+  return ['stabilimento','magazzino','ufficio'].includes(p.ramo) || isStessoSito(p.sito, STAB_CANON);
+}
+// DPI da controllo preposto: stessa formula dell'Audit App sulle voci DPI (sa*, ma*)
+function scoreDpiPreposto(p) {
+  if (p.ramo !== 'stabilimento' && p.ramo !== 'magazzino') return null;
+  const isDpi = x => /^(sa|ma)\d+$/.test(x.voce_id||'');
+  const nc = (p.nc_list||[]).filter(isDpi).length, obs = (p.obs_list||[]).filter(isDpi).length;
+  return Math.max(0, 5 - nc*2 - obs*0.5);
+}
+function fineperiodo(anno, trim) {
+  const fine = {Q1:'03-31',Q2:'06-30',Q3:'09-30',Q4:'12-31'}[trim] || '12-31';
+  const d = `${anno}-${fine}`, oggi = new Date().toISOString().slice(0,10);
+  return d < oggi ? d : oggi;
+}
+const isAuditInternoReparto = (a, reparto) =>
+  isStessoSito(a.sito, STAB_CANON) && a.reparto === reparto && a.origine !== 'terza_parte' &&
+  a.fonte !== 'pdf_import' && a.fonte !== 'excel_import';
+const fmtData = d => d ? d.split('-').reverse().join('/') : '';
+
+function repartoAutoSR(sr) { const {reparto, ...rest} = sr; return getRepartoPerSR(rest); }
+function badgeRepartoSR(s) {
+  const r = getRepartoPerSR(s);
+  if (!r) return s.reparto==='NESSUNO' ? '<br><span class="badge nd">trasversale</span>' : '';
+  return `<br><span class="badge nd" title="${s.reparto?'assegnato a mano':'da area segnalazione'}">${r}${s.reparto?' ✎':''}</span>`;
+}
+
 function calcVotoReparto(reparto) {
   const anno = parseInt(document.getElementById('f-anno')?.value) || new Date().getFullYear();
   const trim = document.getElementById('f-trim')?.value || 'ANNO';
   const isAnnoIntero = trim==='ANNO'||trim==='Anno';
 
-  // FONTE PRIMARIA SEMPRE: dati reali (audit + segnalazioni SafeReport + preposti).
-  // L'inserimento manuale (spi_manuale) non sovrascrive più un indice già alimentato
-  // da dati reali — interviene SOLO sugli indici per cui non esiste alcun dato
-  // automatico, così un voto manuale non può restare "congelato" e ignorare
-  // segnalazioni/eventi successivi come accaduto in precedenza.
-  const auditR = DATA.audits.filter(a =>
-    isStessoSito(a.sito, 'Stabilimento Somec -- sede principale') &&
-    a.reparto === reparto &&
-    a.fonte !== 'pdf_import' && a.fonte !== 'excel_import'
-  );
-  const srAll = DATA.safereports_all || DATA.safereports;
-  const srR = srAll.filter(s =>
-    isStessoSito(s.sito, 'Stabilimento Somec -- sede principale') &&
-    getRepartoPerSR(s) === reparto
-  );
-  const prR = DATA.preposti.filter(p =>
-    isStessoSito(p.sito, 'Stabilimento Somec -- sede principale') &&
-    (p.ramo === reparto || p.reparto === reparto)
-  );
+  // Audit interni del periodo; se assenti, l'ultimo degli ultimi 12 mesi
+  const auditPer = DATA.audits.filter(a => isAuditInternoReparto(a, reparto));
+  let auditR = auditPer, rifAudit = null;
+  if (!auditR.length) {
+    const ref = fineperiodo(anno, isAnnoIntero ? 'Q4' : trim);
+    const d0 = new Date(ref); d0.setFullYear(d0.getFullYear()-1);
+    const min = d0.toISOString().slice(0,10);
+    const cand = (DATA.audits_12m||[]).filter(a => isAuditInternoReparto(a, reparto) &&
+      a.data_audit && a.data_audit <= ref && a.data_audit > min)
+      .sort((x,y)=>y.data_audit.localeCompare(x.data_audit));
+    if (cand.length) { auditR = [cand[0]]; rifAudit = cand[0].data_audit; }
+  }
+  // Rilievi di terza parte assegnati al reparto (campo "reparto" sul singolo rilievo)
+  const tp = DATA.audits.filter(a => isTerzaParte(a) && isStessoSito(a.sito, STAB_CANON)).map(a => {
+    const nc = (a.nc_list||[]).filter(i=>i.reparto===reparto), obs = (a.obs_list||[]).filter(i=>i.reparto===reparto);
+    if (!nc.length && !obs.length) return null;
+    return {...a, nc_list:nc, obs_list:obs, aree_verificate:1, cnt_nc:nc.length, cnt_obs:obs.length,
+      ac_aperte:nc.length, ac_chiuse:nc.filter(x=>x.stato_ac==='chiusa').length};
+  }).filter(Boolean);
+  // Controlli preposti del periodo (DATA.preposti e' gia' filtrato per periodo)
+  const prR = DATA.preposti.filter(p => isPrepostoStab(p) && repartoPreposto(p) === reparto);
+  // Segnalazioni SafeReport del periodo selezionato
+  const srR = DATA.safereports.filter(s => isStessoSito(s.sito, STAB_CANON) && getRepartoPerSR(s) === reparto);
   const manuale = (DATA.spi_manuale||[]).filter(r =>
-    r.reparto===reparto &&
-    isStessoSito(r.sito, 'Stabilimento Somec -- sede principale') &&
-    r.anno===anno &&
-    (isAnnoIntero || r.trimestre===trim)
-  );
+    r.reparto===reparto && isStessoSito(r.sito, STAB_CANON) && r.anno===anno && (isAnnoIntero || r.trimestre===trim));
 
-  if (!auditR.length && !srR.length && !prR.length && !manuale.length) return null;
+  const fonti = [];
+  if (auditPer.length) fonti.push(`audit ${auditPer.length}`);
+  else if (rifAudit) fonti.push(`rif. audit ${fmtData(rifAudit)}`);
+  if (prR.length) fonti.push(`preposti ${prR.length}`);
+  if (tp.length) fonti.push(tp.map(x=>x.ente_terzo||'terza parte').join(', '));
+  if (srR.length) fonti.push(`segnalazioni ${srR.length}`);
 
-  // Calcola SPI con dati disponibili — usa solo gli indici per cui ho dati reali,
-  // evita falsi neutri. repartoContext:true attiva la correzione "assenza di
-  // segnalazioni" (vedi calcSPI): senza audit che la confermino, l'assenza di
-  // segnalazioni non vale più automaticamente punteggio massimo.
-  const scores = calcSPI(auditR, srR, prR, {repartoContext:true});
-
-  // Forza null per indici senza dati reali se non ho audit
-  if(!auditR.length) {
-    scores.procedure = null;
-    scores.dpi       = null;
-    scores.ispezioni = null;
-    scores.unsafe    = null;
-    scores.ac_chiusura = null;
-    scores.conformita  = null;
-    scores.formazione  = null;
-    scores.ore         = null;
+  if (!auditR.length && !tp.length && !srR.length && !prR.length && !manuale.length) {
+    REPARTO_INFO[reparto] = {fonti:[], copertura:0};
+    return null;
   }
 
-  // Integrazione manuale — SOLO per riempire gli indici rimasti privi di un
-  // dato automatico (mai per sostituire un indice già calcolato dai dati reali).
+  const scores = calcSPI([...auditR, ...tp], srR, prR, {repartoContext:true});
+  const haAudit = auditR.length > 0;
+
+  // DPI: audit con valutazione DPI + controlli preposti (voci DPI)
+  const dpiVals = [...auditR.filter(x=>typeof x.score_dpi==='number').map(x=>x.score_dpi),
+                   ...prR.map(scoreDpiPreposto).filter(v=>v!==null)];
+  scores.dpi = dpiVals.length ? parseFloat((dpiVals.reduce((s,v)=>s+v,0)/dpiVals.length).toFixed(1)) : null;
+
+  // Ispezioni: controlli effettuati NEL PERIODO (audit + preposti); nessuno = non valutato
+  const nI = auditPer.length + prR.length;
+  scores.ispezioni = nI===0 ? null : nI>=8?5:nI>=6?4:nI>=4?3:nI>=2?2:1;
+
+  // Unsafe: rilievi / controlli (audit + preposti + rilievi operativi di terza parte)
+  {
+    let tot = auditR.reduce((s,x)=>s+(x.cnt_obs||0)+(x.cnt_nc||0),0) + prR.reduce((s,p)=>s+(p.cnt_obs||0)+(p.cnt_nc||0),0);
+    let den = auditR.length + prR.length;
+    if (UNSAFE_INCLUDE_TERZA_PARTE) tp.forEach(x => { tot += cntOperativi(x); den += 1; });
+    scores.unsafe = den===0 ? null : (r => r===0?5:r<=1?4:r<=2?3:r<=3?2:r<=5?1:0)(tot/den);
+  }
+
+  if (!haAudit && !tp.length) scores.ac_chiusura = null;   // nessuna AC del reparto
+  if (!haAudit) { scores.procedure = null; scores.conformita = null; scores.ore = null; }
+  if (!haAudit && !prR.length) scores.formazione = null;
+
+  // Integrazione manuale — SOLO per riempire gli indici rimasti privi di un dato automatico
   if (manuale.length) {
     const ind = manuale[0].indici||{};
     Object.entries(ind).forEach(([k,v])=>{
-      if ((scores[k]===null || scores[k]===undefined) && v && v._score!==undefined) {
-        scores[k] = v._score;
-      }
+      if ((scores[k]===null || scores[k]===undefined) && v && v._score!==undefined) scores[k] = v._score;
     });
   }
 
-  if (Object.values(scores).every(v=>v===null||v===undefined)) return null;
+  const pesoTot = SPI_CONFIG.reduce((s,c)=>s+c.peso,0);
+  const pesoOk = SPI_CONFIG.filter(c=>scores[c.id]!==null&&scores[c.id]!==undefined).reduce((s,c)=>s+c.peso,0);
+  REPARTO_INFO[reparto] = {fonti, copertura: Math.round(pesoOk/pesoTot*100)};
 
+  if (Object.values(scores).every(v=>v===null||v===undefined)) return null;
   return calcVoto(scores);
 }
 
@@ -567,8 +629,14 @@ function renderSpeedometerReparti() {
 
   REPARTI_CONFIG.forEach(r => {
     const voto = calcVotoReparto(r.id);
-    html += `<div style="text-align:center">${drawSpeedSVG(voto??0, r.nome, voto===null)}</div>`;
+    const inf = REPARTO_INFO[r.id] || {fonti:[]};
+    const nota = voto===null
+      ? '<span style="color:#c0392b">Nessun controllo registrato nel periodo</span>'
+      : `${inf.fonti.join(' · ')}<br><span style="color:${inf.copertura>=70?'#1a7a4a':'#a06010'}">copertura indici ${inf.copertura}%</span>`;
+    html += `<div style="text-align:center;width:200px">${drawSpeedSVG(voto??0, r.nome, voto===null)}
+      <div style="font-size:10px;color:#7a8090;line-height:1.35;margin-top:-6px">${nota}</div></div>`;
   });
+  html += `</div><div style="font-size:10px;color:#7a8090;margin-top:10px;line-height:1.4">Fonti: audit interni del periodo (Audit App e controlli documentati registrati da RSPP); in assenza, ultimo audit interno degli ultimi 12 mesi; controlli App Preposti; rilievi di audit di terza parte assegnati al reparto; segnalazioni SafeReport del periodo.`;
 
   html += '</div></div>';
   sec.innerHTML = html;
@@ -652,6 +720,17 @@ async function loadData() {
     DATA.safereports_all = [...rSAll.docs,...rSPrev.docs]
       .filter(d=>{ if(allIds.has(d.id)) return false; allIds.add(d.id); return true; })
       .map(d=>({...d.data(),_id:d.id}));
+
+    // Audit interni stabilimento degli ultimi 12 mesi (anno corrente + precedente):
+    // servono agli speedometer reparto quando nel periodo non c'e' un audit del reparto
+    try {
+      const [r12a, r12b] = await Promise.all([
+        db.collection('audit_hse').where('anno','==',anno).get(),
+        db.collection('audit_hse').where('anno','==',anno-1).get()
+      ]);
+      DATA.audits_12m = [...r12a.docs, ...r12b.docs].map(d=>({...d.data(),_id:d.id}))
+        .filter(a => a.reparto && isStessoSito(a.sito,'Stabilimento Somec -- sede principale'));
+    } catch(e) { DATA.audits_12m = []; }
 
     // Carica anche trend (tutti i trimestri dell'anno)
     await loadTrendData(anno, sito);
@@ -741,7 +820,9 @@ function calcSPI(aAll,sr,pr,opts) {
 
   // DPI — formula Excel cella Y: se TUTTI blank→5, altrimenti media con 5 come fallback per singolo blank
   // score_dpi già calcolato nell'audit app su scala 0-5
-  scores.dpi = a.length===0?null:parseFloat((a.reduce((s,x)=>s+(x.score_dpi||0),0)/a.length).toFixed(1));
+  // Concorrono solo gli audit con valutazione DPI rilevata (nessun dato = escluso, non 0)
+  const aDpi = a.filter(x => typeof x.score_dpi === 'number');
+  scores.dpi = aDpi.length===0?null:parseFloat((aDpi.reduce((s,x)=>s+x.score_dpi,0)/aDpi.length).toFixed(1));
 
   const nI = a.length;
   scores.ispezioni = nI>=8?5:nI>=6?4:nI>=4?3:nI>=2?2:nI>=1?1:0;
@@ -780,8 +861,10 @@ function calcSPI(aAll,sr,pr,opts) {
     scores.ac_chiusura = pct>=1?5:pct>=0.8?4:pct>=0.6?3:pct>=0.4?2:pct>=0.2?1:0;
   }
 
-  const ncDoc=a.reduce((s,x)=>s+(x.conformita_doc||0),0);
-  const tvoci=a.length*5;
+  // Conformita documentale: esclusi i controlli registrati senza verifica documentale (conformita_doc:null)
+  const aDoc = a.filter(x => x.conformita_doc !== null);
+  const ncDoc=aDoc.reduce((s,x)=>s+(x.conformita_doc||0),0);
+  const tvoci=aDoc.length*5;
   scores.conformita = tvoci===0?null:Math.max(0,parseFloat((5-(ncDoc/tvoci)*5).toFixed(1)));
 
   const nBrf=pr.reduce((s,p)=>s+(p.briefing_count||0),0);
@@ -1238,7 +1321,8 @@ function tagFonte(x) {
   let t = '';
   if (x.origine==='terza_parte') t += `<span class="badge" style="background:#ede7f6;color:#5e35b1">3ª parte${x.ente_terzo?' · '+x.ente_terzo:''}</span> `;
   if (x.ricorrente) t += `<span class="badge" style="background:#fff3e0;color:#e65100">Ricorrente</span> `;
-  if (x.natura) t += `<span class="badge nd">${NATURA_LBL[x.natura]||x.natura}</span>`;
+  if (x.natura) t += `<span class="badge nd">${NATURA_LBL[x.natura]||x.natura}</span> `;
+  if (x.reparto) t += `<span class="badge nd">${x.reparto}</span>`;
   return t ? `<br>${t}` : '';
 }
 
@@ -1446,7 +1530,7 @@ function renderAC() {
       html += `<tr>
         <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
         <td>${tipoRsppLabel(s.tipo)}</td>
-        <td style="font-size:11px">${(s.descrizione||'—').substring(0,80)}...</td>
+        <td style="font-size:11px">${(s.descrizione||'—').substring(0,80)}...${badgeRepartoSR(s)}</td>
         <td style="font-size:11px;color:var(--blue)">${getSegnalante(s)}</td>
         <td style="font-size:11px">${s.destinatario||'—'}</td>
         <td style="${scadStyle}">${scad}</td>
@@ -1473,7 +1557,7 @@ function renderAC() {
       html += `<tr>
         <td style="white-space:nowrap">${(s.data_ora||'—').substring(0,10)}</td>
         <td>${tipoRsppLabel(s.tipo)}</td>
-        <td style="font-size:11px">${(s.descrizione||'—').substring(0,80)}...</td>
+        <td style="font-size:11px">${(s.descrizione||'—').substring(0,80)}...${badgeRepartoSR(s)}</td>
         <td style="font-size:11px;color:var(--blue)">${getSegnalante(s)}</td>
         <td style="color:var(--green);font-weight:700;white-space:nowrap">${s.data_chiusura||'—'}</td>
         <td style="font-size:11px;font-style:italic;color:var(--gray-mid)">${(s.nota_chiusura||'—').substring(0,80)}</td>
@@ -1565,6 +1649,9 @@ async function confirmEdit() {
       const sr = DATA.safereports_all||DATA.safereports;
       const idx = sr.findIndex(x=>(x._id||x.id)===id);
       if (idx>=0) Object.assign(sr[idx], updates);
+      const srP = DATA.safereports.find(x=>(x._id||x.id)===id);   // elenco del periodo (usato dagli speedometer)
+      if (srP && srP !== sr[idx]) Object.assign(srP, updates);
+      renderSpeedometerReparti();
     }
     showToast('✅ Modifiche salvate');
     document.getElementById('modal-edit').classList.remove('show');
@@ -1630,6 +1717,7 @@ function buildViewHTML(tipo, r) {
       ${fld('Livello NC',lvMap[r.livello]||'—')} ${fld('Scadenza AC',r.scadenza||'—')}
       ${fld('Stato AC',r.stato_ac||'aperta')} ${fld('Data chiusura',r.data_chiusura||'—')}
       ${fld('Fonte',fonteTxt(r))} ${fld('Natura',NATURA_LBL[r.natura]||'—')}
+      ${fld('Reparto',r.reparto||'—')}
       ${fldFull('Testo NC',r.voce_testo)}
       ${r.suggerimento?fldFull('Suggerimento auditor',r.suggerimento):''}
       ${fldFull('Nota preposto',r.nota)}
@@ -1644,6 +1732,7 @@ function buildViewHTML(tipo, r) {
       ${fld('Priorita',prMap[r.priorita]||'—')} ${fld('Stato',r.stato_obs||'in monitoraggio')}
       ${fld('Data aggiornamento',r.data_aggiornamento||'—')} ${fld('Fonte',fonteTxt(r))}
       ${fld('Natura',NATURA_LBL[r.natura]||'—')} ${fld('Ricorrente',r.ricorrente?'Sì':'No')}
+      ${fld('Reparto',r.reparto||'—')}
       ${fldFull('Testo OBS',r.voce_testo||r.nota)}
       ${r.suggerimento?fldFull('Suggerimento auditor',r.suggerimento):''}
       ${fldFull('Motivazione',r.nota_gestione)}
@@ -1654,6 +1743,7 @@ function buildViewHTML(tipo, r) {
     ${fld('Protocollo',r._id||r.id)} ${fld('Data',r.data_ora?.substring(0,10))}
     ${fld('Tipo',r.tipo)} ${fld('Sito',r.sito)}
     ${fld('Area',r.area)} ${fld('Stato',r.stato)}
+    ${fld('Reparto (speedometer)',(getRepartoPerSR(r)||'—')+(r.reparto?' (assegnato a mano)':''))}
     ${fld('Segnalato da',r.segnalato_da)} ${fld('Destinatario',r.destinatario)}
     ${fld('Scadenza',r.scadenza||'—')} ${fld('Data chiusura',r.data_chiusura||'—')}
     ${fldFull('Descrizione',r.descrizione)}
@@ -1686,6 +1776,7 @@ function buildEditHTML(tipo, r) {
       ${es('Stato AC','stato_ac',r.stato_ac||'aperta',[{v:'aperta',l:'Aperta'},{v:'chiusa',l:'Chiusa'}])}
       ${ef('Data chiusura','data_chiusura',r.data_chiusura,'date')}
       ${es('Natura','natura',r.natura||'',[{v:'',l:'— non classificata —'},{v:'operativa',l:'Operativa'},{v:'tecnica',l:'Tecnica'},{v:'ambientale',l:'Ambientale'}])}
+      ${es('Reparto','reparto',r.reparto||'',[{v:'',l:'— nessuno / trasversale —'},...REPARTI_CONFIG.map(r=>({v:r.id,l:r.nome}))])}
       <div class="detail-item full">
         <label>Note aggiornamento (il testo precedente è precompilato — aggiungi dopo la data)</label>
         <textarea class="edit-field" id="ef-nota" rows="5" style="font-family:monospace;font-size:11px">${notaAttuale}</textarea>
@@ -1708,6 +1799,7 @@ function buildEditHTML(tipo, r) {
       ${es('Stato OBS','stato_obs',r.stato_obs||'in_monitoraggio',[{v:'in_monitoraggio',l:'In monitoraggio'},{v:'risolto',l:'Risolto'},{v:'elevato',l:'Elevato a NC'}])}
       ${ef('Data aggiornamento','data_aggiornamento',r.data_aggiornamento,'date')}
       ${es('Natura','natura',r.natura||'',[{v:'',l:'— non classificata —'},{v:'operativa',l:'Operativa'},{v:'tecnica',l:'Tecnica'},{v:'ambientale',l:'Ambientale'}])}
+      ${es('Reparto','reparto',r.reparto||'',[{v:'',l:'— nessuno / trasversale —'},...REPARTI_CONFIG.map(r=>({v:r.id,l:r.nome}))])}
       <div class="detail-item full">
         <label>Note aggiornamento (il testo precedente è precompilato — aggiungi dopo la data)</label>
         <textarea class="edit-field" id="ef-nota_gestione" rows="5" style="font-family:monospace;font-size:11px">${notaAttuale}</textarea>
@@ -1720,6 +1812,10 @@ function buildEditHTML(tipo, r) {
     ${ef('Scadenza','scadenza',r.scadenza,'date')}
     ${ef('Data chiusura','data_chiusura',r.data_chiusura,'date')}
     ${ef('Destinatario','destinatario',r.destinatario)}
+    ${es('Reparto (speedometer)','reparto',r.reparto||'',[
+      {v:'',l:'Automatico'+(repartoAutoSR(r)?' — '+repartoAutoSR(r):' — non rilevato')},
+      ...REPARTI_CONFIG.map(x=>({v:x.id,l:x.nome})),
+      {v:'NESSUNO',l:'Nessun reparto (trasversale)'}])}
     ${et('Descrizione','descrizione',r.descrizione)}
     ${et('Come risolta','nota_chiusura',r.nota_chiusura)}
   </div>`;
@@ -1730,15 +1826,15 @@ function readEditForm(tipo) {
   if (tipo==='nc'||tipo==='nc_chiusa') {
     return {livello:parseInt(g('livello')), scadenza:g('scadenza')||null,
       stato_ac:g('stato_ac'), data_chiusura:g('data_chiusura')||null,
-      nota:g('nota'), nota_chiusura:g('nota_chiusura'), natura:g('natura')||null};
+      nota:g('nota'), nota_chiusura:g('nota_chiusura'), natura:g('natura')||null, reparto:g('reparto')||null};
   }
   if (tipo==='obs'||tipo==='obs_storico') {
     return {priorita:parseInt(g('priorita')), stato_obs:g('stato_obs'),
-      data_aggiornamento:g('data_aggiornamento')||null, nota_gestione:g('nota_gestione'), natura:g('natura')||null};
+      data_aggiornamento:g('data_aggiornamento')||null, nota_gestione:g('nota_gestione'), natura:g('natura')||null, reparto:g('reparto')||null};
   }
   return {stato:g('stato'), scadenza:g('scadenza')||null,
     data_chiusura:g('data_chiusura')||null, destinatario:g('destinatario'),
-    descrizione:g('descrizione'), nota_chiusura:g('nota_chiusura')};
+    descrizione:g('descrizione'), nota_chiusura:g('nota_chiusura'), reparto:g('reparto')||null};
 }
 
 
