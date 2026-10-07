@@ -53,13 +53,15 @@ td{padding:6px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}
   <div class="card">
     <p class="note">Regole applicate in Dashboard: le NC entrano nel registro AC e nell'indice <b>Chiusura AC</b>; nell'indice <b>Unsafe Acts/Conditions</b> contano solo i rilievi di natura <b>operativa</b> divisi per le aree verificate; i rilievi <b>ambientali</b> (G1–G5) restano nel registro ma fuori dallo SPI sicurezza; DPI, Ispezioni e Conformità documentale restano calcolati sui soli audit interni.<br>
     Le scadenze AC non sono preimpostate: vanno assegnate dal piano di chiusura (✏️ nel tab Azioni Correttive).<br>
+    Reparti: linea vetri e vetreria (A1–A3, F1–F2) → R8; Magazzino 2 (H1–H3) → R5; gli altri rilievi restano trasversali allo stabilimento. Se l'import è già stato eseguito, usare "Assegna reparti".<br>
     L'import usa un ID fisso: una seconda esecuzione viene bloccata, quindi non si creano duplicati.</p>
     <button class="btn btn-green" id="btn-imp" onclick="importa()">⬆ Importa i 43 rilievi in Dashboard</button>
     <button class="btn btn-red" id="btn-del" onclick="annulla()" style="margin-left:8px">✖ Annulla import</button>
+    <button class="btn" id="btn-rep" onclick="assegnaReparti()" style="margin-left:8px;background:#5e35b1">🏭 Assegna reparti (import già eseguito)</button>
     <div id="log"></div>
   </div>
   <div class="card table-wrap">
-    <table><thead><tr><th>Cod.</th><th>Rilievo</th><th>Classificazione</th><th>Natura</th><th>Euroiso</th></tr></thead><tbody id="tb"></tbody></table>
+    <table><thead><tr><th>Cod.</th><th>Rilievo</th><th>Classificazione</th><th>Natura</th><th>Reparto</th><th>Euroiso</th></tr></thead><tbody id="tb"></tbody></table>
   </div>
 </main>
 <script>
@@ -84,7 +86,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 3
+  "livello": 3,
+  "reparto": "R8"
  },
  {
   "cod": "A2",
@@ -96,7 +99,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 3
+  "livello": 3,
+  "reparto": "R8"
  },
  {
   "cod": "A3",
@@ -108,7 +112,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 3
+  "livello": 3,
+  "reparto": "R8"
  },
  {
   "cod": "A4",
@@ -120,7 +125,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 3
+  "livello": 3,
+  "reparto": null
  },
  {
   "cod": "A5",
@@ -132,7 +138,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "A6",
@@ -144,7 +151,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 2
+  "livello": 2,
+  "reparto": null
  },
  {
   "cod": "A7",
@@ -156,7 +164,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "A8",
@@ -168,7 +177,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "A9",
@@ -180,7 +190,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "A10",
@@ -192,7 +203,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "A11",
@@ -204,7 +216,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 2
+  "livello": 2,
+  "reparto": null
  },
  {
   "cod": "A12",
@@ -216,7 +229,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "NC",
-  "livello": 2
+  "livello": 2,
+  "reparto": null
  },
  {
   "cod": "B1",
@@ -228,7 +242,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 2
+  "livello": 2,
+  "reparto": null
  },
  {
   "cod": "B2",
@@ -240,7 +255,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "B3",
@@ -252,7 +268,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "NC",
-  "livello": 2
+  "livello": 2,
+  "reparto": null
  },
  {
   "cod": "B4",
@@ -264,7 +281,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "B5",
@@ -276,7 +294,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "B6",
@@ -288,7 +307,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "B7",
@@ -300,7 +320,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "B8",
@@ -312,7 +333,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 1
+  "priorita": 1,
+  "reparto": null
  },
  {
   "cod": "C1",
@@ -324,7 +346,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "C2",
@@ -336,7 +359,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "C3",
@@ -348,7 +372,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "C4",
@@ -360,7 +385,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "C5",
@@ -372,7 +398,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 1
+  "priorita": 1,
+  "reparto": null
  },
  {
   "cod": "C6",
@@ -384,7 +411,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 1
+  "priorita": 1,
+  "reparto": null
  },
  {
   "cod": "D1",
@@ -396,7 +424,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "D2",
@@ -408,7 +437,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "D3",
@@ -420,7 +450,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "E1",
@@ -432,7 +463,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "E2",
@@ -444,7 +476,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": null
  },
  {
   "cod": "E3",
@@ -456,7 +489,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 1
+  "priorita": 1,
+  "reparto": null
  },
  {
   "cod": "E4",
@@ -468,7 +502,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 1
+  "priorita": 1,
+  "reparto": null
  },
  {
   "cod": "F1",
@@ -480,7 +515,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": "R8"
  },
  {
   "cod": "F2",
@@ -492,7 +528,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": "R8"
  },
  {
   "cod": "G1",
@@ -504,7 +541,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "ambientale",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "G2",
@@ -516,7 +554,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "ambientale",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "G3",
@@ -528,7 +567,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "ambientale",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "G4",
@@ -540,7 +580,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "ambientale",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": null
  },
  {
   "cod": "G5",
@@ -552,7 +593,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "ambientale",
   "tipo": "OBS",
-  "priorita": 1
+  "priorita": 1,
+  "reparto": null
  },
  {
   "cod": "H1",
@@ -564,7 +606,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "operativa",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": "R5"
  },
  {
   "cod": "H2",
@@ -576,7 +619,8 @@ const RILIEVI = [
   "ricorrente": false,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 2
+  "priorita": 2,
+  "reparto": "R5"
  },
  {
   "cod": "H3",
@@ -588,7 +632,8 @@ const RILIEVI = [
   "ricorrente": true,
   "natura": "tecnica",
   "tipo": "OBS",
-  "priorita": 3
+  "priorita": 3,
+  "reparto": "R5"
  }
 ];
 
@@ -597,7 +642,7 @@ function buildDoc() {
   RILIEVI.forEach(r => {
     const base = { voce_id:'EUR15563-'+r.cod, voce_testo:r.voce_testo, sezione:r.sezione,
       natura:r.natura, ricorrente:r.ricorrente, priorita_euroiso:r.priorita_euroiso,
-      rischio:r.rischio, suggerimento:r.suggerimento, nota:'', scadenza:null };
+      rischio:r.rischio, suggerimento:r.suggerimento, reparto:r.reparto||null, nota:'', scadenza:null };
     if (r.tipo==='NC') nc_list.push({...base, livello:r.livello, stato_ac:'aperta'});
     else obs_list.push({...base, priorita:r.priorita, stato_obs:'in_monitoraggio'});
   });
@@ -640,7 +685,7 @@ function render() {
     const cl = r.tipo==='NC' ? `<span class="b nc${r.livello}">NC Lv.${r.livello}</span>`
       : `<span class="b o${r.priorita}">OBS ${['','Bassa','Media','Alta'][r.priorita]}</span>`;
     return `<tr><td><b>${r.cod}</b></td><td>${r.voce_testo}<br><span class="note">${r.sezione}</span></td>
-      <td>${cl}${r.ricorrente?' <span class="b ric">RIC</span>':''}</td><td>${r.natura}</td><td>${r.priorita_euroiso}</td></tr>`;
+      <td>${cl}${r.ricorrente?' <span class="b ric">RIC</span>':''}</td><td>${r.natura}</td><td>${r.reparto||'—'}</td><td>${r.priorita_euroiso}</td></tr>`;
   }).join('');
 }
 
@@ -672,6 +717,24 @@ async function annulla() {
     if (!confirm(msg)) return;
     await ref.delete();
     log('🗑 Import annullato: documento eliminato.');
+  } catch(e) { log('❌ Errore: ' + e.message); }
+}
+
+// Aggiorna il documento già importato: assegna il reparto ai rilievi che ne sono privi,
+// senza toccare stati, note, scadenze o chiusure già inserite in Dashboard.
+async function assegnaReparti() {
+  try {
+    const ref = db.collection('audit_hse').doc(DOC_ID);
+    const snap = await ref.get();
+    if (!snap.exists) { log('Documento non presente: eseguire prima l\'import.'); return; }
+    const d = snap.data();
+    const mappa = Object.fromEntries(RILIEVI.filter(r=>r.reparto).map(r=>['EUR15563-'+r.cod, r.reparto]));
+    let n = 0;
+    const upd = arr => (arr||[]).map(x => { if (!x.reparto && mappa[x.voce_id]) { n++; return {...x, reparto:mappa[x.voce_id]}; } return x; });
+    const nc_list = upd(d.nc_list), obs_list = upd(d.obs_list);
+    if (!n) { log('Reparti già assegnati: nessuna modifica.'); return; }
+    await ref.update({nc_list, obs_list});
+    log(`✅ Reparto assegnato a ${n} rilievi (linea vetri/vetreria → R8, Magazzino 2 → R5).`);
   } catch(e) { log('❌ Errore: ' + e.message); }
 }
 
