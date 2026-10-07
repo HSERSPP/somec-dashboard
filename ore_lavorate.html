@@ -33,8 +33,11 @@ select:focus,input:focus{outline:none;border-color:#2563a8}
 .ore-table tr:nth-child(even) td{background:#fafbfc}
 .ore-table tr.somec-row td{background:#e8f0fa}
 .ore-table tr.stab-row td{background:#e8f5ee}
+.ore-table tr.rep-row td{background:#f6fbf8}
+.ore-table tr.rep-row .soggetto-label{font-weight:500;padding-left:14px}
 .ore-input{width:120px;border:1px solid #d0d4da;border-radius:6px;padding:5px 8px;font-size:13px;font-family:inherit;text-align:right}
 .ore-input:focus{outline:none;border-color:#2563a8;background:#f8fbff}
+.ore-input[readonly]{background:#eef1f4;color:#1a4a7a;font-weight:700;border-style:dashed}
 .soggetto-label{font-size:12px;font-weight:600;color:#1a1e28}
 .soggetto-sub{font-size:10px;color:#7a8090;display:block}
 .cantiere-header{background:#e8f0fa;font-weight:700;font-size:12px;color:#1a4a7a;padding:8px 12px;border-bottom:1px solid #b8cfe8}
@@ -88,7 +91,8 @@ select:focus,input:focus{outline:none;border-color:#2563a8}
   <!-- TABELLA ORE -->
   <div class="card">
     <h2>⏱ Ore lavorate per soggetto</h2>
-    <p style="font-size:11px;color:#7a8090;margin-bottom:14px">Inserisci le ore totali lavorate nel trimestre per ogni soggetto. Le ore vengono usate per calcolare l'indice SPI "Ore lavorate" (peso 13%).</p>
+    <p style="font-size:11px;color:#7a8090;margin-bottom:14px">Inserisci le ore totali lavorate nel trimestre per ogni soggetto. Le ore vengono usate per calcolare l'indice SPI "Ore lavorate" (peso 13%).<br>
+    Stabilimento: se inserisci le ore per reparto, il totale stabilimento si calcola in automatico come somma dei reparti. Se i reparti restano vuoti, puoi inserire direttamente il totale come in precedenza.</p>
     <div id="tabella-container">
       <p style="color:#7a8090;font-size:12px;text-align:center;padding:20px">Seleziona anno e trimestre e clicca "Carica dati"</p>
     </div>
@@ -115,10 +119,25 @@ firebase.initializeApp({
 });
 const db = firebase.firestore();
 
+// ── REPARTI STABILIMENTO (stessi codici della Dashboard SPI) ─
+const REPARTI = [
+  {id:'R1',   nome:'R1 — Uffici'},
+  {id:'R3',   nome:'R3 — Lavorazione Alluminio'},
+  {id:'R3.1', nome:'R3.1 — Pianali'},
+  {id:'R4',   nome:'R4 — Assemblaggio'},
+  {id:'R5',   nome:'R5 — Magazzino'},
+  {id:'R5.1', nome:'R5.1 — Imballo'},
+  {id:'R7',   nome:'R7 — Carpenteria'},
+  {id:'R8',   nome:'R8 — Vetreria'},
+  {id:'RE',   nome:'RE — Area Esterna'},
+];
+
 // ── STRUTTURA CANTIERI ────────────────────────────────────
+// Nello stabilimento: riga "somec" = totale; righe "REP_*" = reparti (il totale e' la loro somma)
 const STRUTTURA = [
   {cantiere:'Stabilimento Somec', sito:'Stabilimento Somec -- sede principale', isStab:true,
-   soggetti:[{nome:'Somec – Stabilimento', key:'somec'}]},
+   soggetti:[{nome:'Somec – Stabilimento (totale)', key:'somec'},
+             ...REPARTI.map(r=>({nome:r.nome, key:'REP_'+r.id, reparto:r.id}))]},
   {cantiere:'Genova (Fincantieri)', sito:'Genova (Fincantieri)', isStab:false,
    soggetti:[{nome:'Somec – Genova', key:'somec'},{nome:'Giemmeci', key:'Giemmeci'},{nome:'HB Montaggi', key:'HB Montaggi'},{nome:'Macris', key:'Macris'}]},
   {cantiere:'Marghera (Fincantieri)', sito:'Marghera (Fincantieri)', isStab:false,
@@ -132,6 +151,7 @@ const STRUTTURA = [
   {cantiere:'Papenburg (Meyer Werft)', sito:'Papenburg (Meyer Werft)', isStab:false,
    soggetti:[{nome:'Somec – Papenburg', key:'somec'},{nome:'Technik', key:'Technik'},{nome:'GC Nautica', key:'GC Nautica'}]},
 ];
+const STAB = STRUTTURA[0];
 
 let oreData = {}; // {docId: {ore: N}}
 let modified = new Set();
@@ -139,6 +159,9 @@ let modified = new Set();
 function docId(sito, key, anno, trim) {
   return `ORE-${anno}-${trim}-${sito.replace(/[^a-zA-Z0-9]/g,'_').substring(0,30)}-${key.replace(/[^a-zA-Z0-9]/g,'_')}`;
 }
+const curAnno = () => document.getElementById('f-anno').value;
+const curTrim = () => document.getElementById('f-trim').value;
+const valInp = id => parseInt(document.getElementById('inp-'+id)?.value||0)||0;
 
 function showToast(msg, dur=3000) {
   const t=document.getElementById('toast');
@@ -147,26 +170,30 @@ function showToast(msg, dur=3000) {
 }
 
 async function loadOre() {
-  const anno = document.getElementById('f-anno').value;
-  const trim = document.getElementById('f-trim').value;
+  const anno = curAnno(), trim = curTrim();
   document.getElementById('stato-salvataggio').textContent = 'Caricamento...';
-
   try {
     const snap = await db.collection('ore_lavorate')
       .where('anno','==',parseInt(anno))
       .where('trimestre','==',trim)
       .get();
-
     oreData = {};
     snap.docs.forEach(d => { oreData[d.id] = d.data(); });
     modified.clear();
-
     buildTable(anno, trim);
     document.getElementById('stato-salvataggio').textContent =
       `Dati ${trim} ${anno} caricati — ${snap.size} record trovati`;
   } catch(e) {
     showToast('❌ Errore caricamento: '+e.message);
   }
+}
+
+// Totale di un cantiere: per lo stabilimento conta solo la riga totale (i reparti ne sono il dettaglio)
+function totaleCantiere(c, anno, trim, daInput) {
+  return c.soggetti.filter(s => !s.reparto).reduce((t,s) => {
+    const id = docId(c.sito, s.key, anno, trim);
+    return t + (daInput ? valInp(id) : (oreData[id]?.ore || 0));
+  }, 0);
 }
 
 function buildTable(anno, trim) {
@@ -177,17 +204,16 @@ function buildTable(anno, trim) {
 
   STRUTTURA.forEach(c => {
     html += `<tr><td colspan="5" class="cantiere-header">${c.isStab?'🏭':'🚢'} ${c.cantiere}</td></tr>`;
-    let totOre = 0;
     c.soggetti.forEach(s => {
       const id = docId(c.sito, s.key, anno, trim);
       const ore = oreData[id]?.ore || 0;
-      totOre += ore;
       const isSomec = s.key === 'somec';
-      const rowClass = c.isStab ? 'stab-row' : isSomec ? 'somec-row' : '';
+      const rowClass = s.reparto ? 'rep-row' : c.isStab ? 'stab-row' : isSomec ? 'somec-row' : '';
+      const tipo = s.reparto ? 'Reparto' : isSomec ? (c.isStab ? 'Somec (diretto) — totale' : 'Somec (diretto)') : 'Subappaltatore';
       html += `<tr class="${rowClass}">
         <td></td>
         <td><span class="soggetto-label">${s.nome}</span></td>
-        <td style="font-size:10px;color:#7a8090">${isSomec?'Somec (diretto)':'Subappaltatore'}</td>
+        <td style="font-size:10px;color:#7a8090">${tipo}</td>
         <td>
           <input type="number" class="ore-input" id="inp-${id}"
             value="${ore||''}" min="0" step="1" placeholder="0"
@@ -201,25 +227,53 @@ function buildTable(anno, trim) {
     });
     html += `<tr class="totale-row">
       <td colspan="3" style="text-align:right;font-size:11px;color:#7a8090">TOTALE ${c.cantiere.split('(')[0].trim()}:</td>
-      <td id="tot-${c.sito.replace(/[^a-zA-Z0-9]/g,'_')}" style="font-size:13px;font-weight:800;color:#1a4a7a">${totOre.toLocaleString('it-IT')} h</td>
+      <td id="tot-${c.sito.replace(/[^a-zA-Z0-9]/g,'_')}" style="font-size:13px;font-weight:800;color:#1a4a7a">${totaleCantiere(c, anno, trim, false).toLocaleString('it-IT')} h</td>
       <td></td>
     </tr>`;
   });
 
   html += '</tbody></table>';
   cont.innerHTML = html;
+  syncTotaleStab(false);
   aggiornaRiepilogo(anno, trim);
 }
 
-function onOreChange(id) {
+// Se ci sono ore per reparto, il totale stabilimento = somma reparti (campo in sola lettura)
+function syncTotaleStab(marca) {
+  const anno = curAnno(), trim = curTrim();
+  const idTot = docId(STAB.sito, 'somec', anno, trim);
+  const inpTot = document.getElementById('inp-'+idTot);
+  if (!inpTot) return;
+  const reparti = STAB.soggetti.filter(s=>s.reparto);
+  const somma = reparti.reduce((t,s)=>t+valInp(docId(STAB.sito, s.key, anno, trim)),0);
+  if (somma > 0) {
+    inpTot.readOnly = true;
+    inpTot.title = 'Calcolato come somma dei reparti';
+    if (parseInt(inpTot.value||0) !== somma) {
+      inpTot.value = somma;
+      if (marca) markModified(idTot);
+    }
+  } else {
+    inpTot.readOnly = false;
+    inpTot.title = '';
+  }
+}
+
+function markModified(id) {
   modified.add(id);
   const el = document.getElementById('stato-'+id);
   if (el) el.innerHTML = '<span class="badge-modified">✏️ Modificato</span>';
 }
 
+function onOreChange(id) {
+  markModified(id);
+  syncTotaleStab(true);
+  aggiornaTotali(curAnno(), curTrim());
+}
+
 async function salvaOre() {
-  const anno = parseInt(document.getElementById('f-anno').value);
-  const trim = document.getElementById('f-trim').value;
+  const anno = parseInt(curAnno());
+  const trim = curTrim();
 
   if (modified.size === 0) { showToast('Nessuna modifica da salvare'); return; }
 
@@ -229,26 +283,28 @@ async function salvaOre() {
     if (!inp) continue;
     const ore = parseInt(inp.value)||0;
 
-    // Estrai sito e key dall'id
-    const parts = id.replace('ORE-'+anno+'-'+trim+'-','');
-    // Trova cantiere e soggetto dalla struttura
-    let sito='', soggetto='', isSomec=false;
+    let sito='', soggetto='', isSomec=false, reparto=null, key='';
     STRUTTURA.forEach(c => {
       c.soggetti.forEach(s => {
         if (docId(c.sito, s.key, anno, trim) === id) {
-          sito = c.sito; soggetto = s.nome; isSomec = s.key==='somec';
+          sito = c.sito; soggetto = s.nome; reparto = s.reparto||null;
+          isSomec = s.key==='somec' || !!s.reparto; key = s.key;
         }
       });
     });
 
+    const rec = {
+      id, anno, trimestre:trim, sito, soggetto,
+      key: key==='somec' ? 'somec' : (reparto ? key : soggetto),
+      ore, is_somec:isSomec,
+      timestamp: new Date().toISOString(),
+    };
+    // Le righe reparto sono il dettaglio del totale stabilimento: la Dashboard non le somma al totale
+    if (reparto) { rec.reparto = reparto; rec.tipo_record = 'reparto'; }
+
     try {
-      await db.collection('ore_lavorate').doc(id).set({
-        id, anno, trimestre:trim, sito, soggetto,
-        key: isSomec?'somec':soggetto,
-        ore, is_somec:isSomec,
-        timestamp: new Date().toISOString(),
-      });
-      oreData[id] = {ore, sito, soggetto};
+      await db.collection('ore_lavorate').doc(id).set(rec);
+      oreData[id] = rec;
       const el = document.getElementById('stato-'+id);
       if (el) el.innerHTML = '<span class="badge-saved">✅ Salvato</span>';
       ok++;
@@ -268,15 +324,7 @@ async function salvaOre() {
 
 function aggiornaRiepilogo(anno, trim) {
   const totali = {};
-  STRUTTURA.forEach(c => {
-    let tot=0;
-    c.soggetti.forEach(s => {
-      const id = docId(c.sito, s.key, anno, trim);
-      const inp = document.getElementById('inp-'+id);
-      tot += parseInt(inp?.value||0)||0;
-    });
-    totali[c.cantiere] = tot;
-  });
+  STRUTTURA.forEach(c => { totali[c.cantiere] = totaleCantiere(c, anno, trim, true); });
 
   const grid = document.getElementById('riepilogo-grid');
   const card = document.getElementById('riepilogo-card');
@@ -296,19 +344,14 @@ function aggiornaRiepilogo(anno, trim) {
 
 function aggiornaTotali(anno, trim) {
   STRUTTURA.forEach(c => {
-    let tot=0;
-    c.soggetti.forEach(s => {
-      const id = docId(c.sito, s.key, anno, trim);
-      const inp = document.getElementById('inp-'+id);
-      tot += parseInt(inp?.value||0)||0;
-    });
     const el = document.getElementById('tot-'+c.sito.replace(/[^a-zA-Z0-9]/g,'_'));
-    if (el) el.textContent = tot.toLocaleString('it-IT')+' h';
+    if (el) el.textContent = totaleCantiere(c, anno, trim, true).toLocaleString('it-IT')+' h';
   });
+  aggiornaRiepilogo(anno, trim);
 }
 
 function resetForm() {
-  document.querySelectorAll('.ore-input').forEach(inp=>{ inp.value=''; });
+  document.querySelectorAll('.ore-input').forEach(inp=>{ inp.value=''; inp.readOnly=false; });
   modified.clear();
   showToast('Form resettato');
 }
