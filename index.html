@@ -536,6 +536,19 @@ function badgeRepartoSR(s) {
   return `<br><span class="badge nd" title="${s.reparto?'assegnato a mano':'da area segnalazione'}">${r}${s.reparto?' ✎':''}</span>`;
 }
 
+// Indici di un inserimento manuale (inserimento_spi.html) realmente compilati:
+// l'app salva tutti gli 11 indici, anche quelli lasciati vuoti (con il punteggio di default),
+// quindi si considerano solo quelli con almeno un campo valorizzato — come nell'anteprima dell'app.
+function scoresManuali(indici) {
+  const out = {};
+  Object.entries(indici||{}).forEach(([k,v]) => {
+    if (!v || v._score===undefined || v._score===null) return;
+    const compilato = Object.entries(v).some(([c,x]) => c!=='_score' && x!==null && x!=='' && x!==undefined);
+    if (compilato) out[k] = v._score;
+  });
+  return out;
+}
+
 function calcVotoReparto(reparto) {
   const anno = parseInt(document.getElementById('f-anno')?.value) || new Date().getFullYear();
   const trim = document.getElementById('f-trim')?.value || 'ANNO';
@@ -607,9 +620,8 @@ function calcVotoReparto(reparto) {
 
   // Integrazione manuale — SOLO per riempire gli indici rimasti privi di un dato automatico
   if (manuale.length) {
-    const ind = manuale[0].indici||{};
-    Object.entries(ind).forEach(([k,v])=>{
-      if ((scores[k]===null || scores[k]===undefined) && v && v._score!==undefined) scores[k] = v._score;
+    Object.entries(scoresManuali(manuale[0].indici)).forEach(([k,v])=>{
+      if (scores[k]===null || scores[k]===undefined) scores[k] = v;
     });
   }
 
@@ -1108,7 +1120,7 @@ const CANTIERI_CONFIG = [
   {nome:'Monfalcone', sito:'Monfalcone (Fincantieri)',
    fornitori:['Sotrade','PLG','TSM','EJ-ER']},
   {nome:'Turku',      sito:'Turku (Meyer)',
-   fornitori:['Sotrade','SVM','Finistratum','Fabrilis','Falmot','TKY','Novus']},
+   fornitori:['Sotrade','SVM','Finistratum','Fabrilis','Falmot','TKY','Novus','Mapei']},
   {nome:'Saint-Nazaire',sito:"Saint-Nazaire (Chantiers de l'Atlantique)",
    fornitori:['Technik','Borhan']},
   {nome:'Papenburg',  sito:'Papenburg (Meyer Werft)',
@@ -1245,11 +1257,26 @@ function renderSpeedometerInto(targetId, sitoFiltro) {
       prTot = [...prTot, ...d.preposti.filter(p=>isStessoSito(p.sito, sito))];
     });
 
+    // Inserimenti manuali (inserimento_spi.html) per questo cantiere e soggetto
+    const manDocs = (DATA.spi_manuale||[]).filter(r =>
+      isStessoSito(r.sito, sito) && r.anno===anno2 && (isAnnoIntero || r.trimestre===trim2) &&
+      (impresa ? (r.soggetto_key||'').toLowerCase()===impresa.toLowerCase() : r.soggetto_key==='somec'));
+
     // Usa solo audit reali (non import) per il ricalcolo
     const auditReali = auditsTot.filter(a=>a.fonte!=='pdf_import'&&a.fonte!=='excel_import');
     if (auditReali.length) {
-      return calcVoto(calcSPI(auditReali, srTot, prTot));
+      const scores = calcSPI(auditReali, srTot, prTot);
+      // il dato manuale integra solo gli indici rimasti senza dato automatico
+      if (manDocs.length) Object.entries(scoresManuali(manDocs[0].indici)).forEach(([k,v])=>{
+        if (scores[k]===null || scores[k]===undefined) scores[k] = v;
+      });
+      return calcVoto(scores);
     }
+
+    // Nessun audit: voto dal solo inserimento manuale (media dei trimestri se "Anno intero")
+    const votiMan = manDocs.map(r => scoresManuali(r.indici))
+      .filter(sc => Object.keys(sc).length).map(sc => calcVoto(sc));
+    if (votiMan.length) return parseFloat((votiMan.reduce((t,v)=>t+v,0)/votiMan.length).toFixed(1));
 
     return null; // N.E. se nessun dato disponibile
   };
